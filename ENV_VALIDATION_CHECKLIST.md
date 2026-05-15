@@ -1,0 +1,62 @@
+# Env Validation Checklist
+
+## Required
+- `DATABASE_URL`
+- `DATABASE_SSL` (`true` on Render Postgres)
+- `SOLANA_RPC`
+- `HELIUS_RPC_URL`
+- `HELIUS_WS_URL`
+- `TELEGRAM_BOT_TOKEN`
+- `API_SHARED_SECRET`
+- `CUSTODY_MASTER_KEY`
+- `JUPITER_API_KEY`
+
+## Optional With Defaults
+- `PORT` (3100)
+- `HELIUS_GATEKEEPER_RPC_URL`
+- `ALCHEMY_RPC_URL`
+- `ALCHEMY_WS_URL`
+- `JUPITER_API_BASE_URL`
+- `DEXSCREENER_BASE_URL`
+- `PUMP_PROGRAM_ID`
+- `POLL_INTERVAL_MS` (250)
+- `MONITOR_INTERVAL_MS` (30000)
+- `SIGNAL_RATE_LIMIT_WINDOW_MS` (60000)
+- `SIGNAL_RATE_LIMIT_MAX` (120)
+- `SIGNAL_REPLAY_WINDOW_SECONDS` (300)
+- `WORKER_FAILURE_ALERT_THRESHOLD` (3)
+- `WORKER_FAILURE_ALERT_WINDOW_MS` (300000)
+- `RPC_SLOT_LAG_THRESHOLD` (15)
+- `RPC_HEALTH_CACHE_MS` (5000)
+- `RPC_REQUEST_TIMEOUT_MS` (10000)
+- `TX_CONFIRMATION_TIMEOUT_MS` (60000)
+- `WS_HEARTBEAT_MS` (30000)
+- `WS_FREEZE_THRESHOLD_MS` (90000)
+- `WS_RECONNECT_BASE_MS` (2000)
+- `WS_RECONNECT_MAX_MS` (15000)
+- `SNIPER_ENABLE_DEXSCREENER` (`true`)
+- `SNIPER_WARMUP_MS` (4000)
+- `SNIPER_MOMENTUM_WINDOW_MS` (10000)
+- `SNIPER_PROCESSED_SIGNATURE_TTL_MS` (1800000)
+- `SNIPER_MAX_TRACKED_TOKENS` (250)
+- `SNIPER_MIN_INITIAL_LIQUIDITY_SOL` (8)
+- `SNIPER_MAX_CURVE_PROGRESS_PCT` (75)
+- `SNIPER_MAX_DEV_WALLET_PCT` (15)
+- `SNIPER_MAX_TOP_HOLDER_PCT` (30)
+- `SNIPER_MAX_BUY_BURST_COUNT` (36)
+- `SNIPER_MIN_UNIQUE_BUYER_RATIO` (0.55)
+- `SNIPER_MAX_SUSPICIOUS_WALLETS` (2)
+- `SKIP_PREFLIGHT_ON_VERY_HIGH_PRIORITY` (`true`)
+
+## Fail-Fast Behavior
+The app now fails on startup when required env vars are missing or numeric settings are invalid.
+
+## Process Check
+- `npm run start:api`
+- `npm run start:bot`
+- `npm run start:worker`
+- `npm run start:monitor`
+- `npm run start:sniper`
+
+## Render Note
+- For Render deployment, use the included `render.yaml` Blueprint and a Render Postgres database.

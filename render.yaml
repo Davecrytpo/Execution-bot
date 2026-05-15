@@ -1,0 +1,989 @@
+databases:
+  - name: solana-telegram-execution-db
+
+services:
+  - type: web
+    name: solana-telegram-execution-api
+    runtime: node
+    plan: starter
+    buildCommand: npm ci && npm run build
+    preDeployCommand: npm run migrate
+    startCommand: npm run start:api
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: solana-telegram-execution-db
+          property: connectionString
+      - key: DATABASE_SSL
+        value: "true"
+      - key: API_SHARED_SECRET
+        generateValue: true
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: CUSTODY_MASTER_KEY
+        sync: false
+      - key: SOLANA_RPC
+        sync: false
+      - key: HELIUS_RPC_URL
+        sync: false
+      - key: HELIUS_WS_URL
+        sync: false
+      - key: HELIUS_GATEKEEPER_RPC_URL
+        sync: false
+      - key: ALCHEMY_RPC_URL
+        sync: false
+      - key: ALCHEMY_WS_URL
+        sync: false
+      - key: JUPITER_API_BASE_URL
+        value: https://api.jup.ag/swap/v1
+      - key: JUPITER_API_KEY
+        sync: false
+      - key: DEXSCREENER_BASE_URL
+        value: https://api.dexscreener.com/latest/dex/tokens
+      - key: PUMP_PROGRAM_ID
+        value: 6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P
+      - key: POLL_INTERVAL_MS
+        value: "250"
+      - key: MONITOR_INTERVAL_MS
+        value: "30000"
+      - key: SIGNAL_RATE_LIMIT_WINDOW_MS
+        value: "60000"
+      - key: SIGNAL_RATE_LIMIT_MAX
+        value: "120"
+      - key: SIGNAL_REPLAY_WINDOW_SECONDS
+        value: "300"
+      - key: WORKER_FAILURE_ALERT_THRESHOLD
+        value: "3"
+      - key: WORKER_FAILURE_ALERT_WINDOW_MS
+        value: "300000"
+      - key: RPC_SLOT_LAG_THRESHOLD
+        value: "15"
+      - key: RPC_HEALTH_CACHE_MS
+        value: "5000"
+      - key: RPC_REQUEST_TIMEOUT_MS
+        value: "10000"
+      - key: TX_CONFIRMATION_TIMEOUT_MS
+        value: "60000"
+      - key: WS_HEARTBEAT_MS
+        value: "30000"
+      - key: WS_FREEZE_THRESHOLD_MS
+        value: "90000"
+      - key: WS_RECONNECT_BASE_MS
+        value: "2000"
+      - key: WS_RECONNECT_MAX_MS
+        value: "15000"
+      - key: SNIPER_ENABLE_DEXSCREENER
+        value: "true"
+      - key: SNIPER_WARMUP_MS
+        value: "4000"
+      - key: SNIPER_MOMENTUM_WINDOW_MS
+        value: "10000"
+      - key: SNIPER_PROCESSED_SIGNATURE_TTL_MS
+        value: "1800000"
+      - key: SNIPER_MAX_TRACKED_TOKENS
+        value: "250"
+      - key: SNIPER_MIN_INITIAL_LIQUIDITY_SOL
+        value: "8"
+      - key: SNIPER_MAX_CURVE_PROGRESS_PCT
+        value: "75"
+      - key: SNIPER_MAX_DEV_WALLET_PCT
+        value: "15"
+      - key: SNIPER_MAX_TOP_HOLDER_PCT
+        value: "30"
+      - key: SNIPER_MAX_BUY_BURST_COUNT
+        value: "36"
+      - key: SNIPER_MIN_UNIQUE_BUYER_RATIO
+        value: "0.55"
+      - key: SNIPER_MAX_SUSPICIOUS_WALLETS
+        value: "2"
+      - key: SKIP_PREFLIGHT_ON_VERY_HIGH_PRIORITY
+        value: "true"
+
+  - type: worker
+    name: solana-telegram-execution-bot
+    runtime: node
+    plan: starter
+    buildCommand: npm ci && npm run build
+    startCommand: npm run start:bot
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: solana-telegram-execution-db
+          property: connectionString
+      - key: DATABASE_SSL
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: DATABASE_SSL
+      - key: API_SHARED_SECRET
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: API_SHARED_SECRET
+      - key: TELEGRAM_BOT_TOKEN
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: TELEGRAM_BOT_TOKEN
+      - key: CUSTODY_MASTER_KEY
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: CUSTODY_MASTER_KEY
+      - key: SOLANA_RPC
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: SOLANA_RPC
+      - key: HELIUS_RPC_URL
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: HELIUS_RPC_URL
+      - key: HELIUS_WS_URL
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: HELIUS_WS_URL
+      - key: HELIUS_GATEKEEPER_RPC_URL
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: HELIUS_GATEKEEPER_RPC_URL
+      - key: ALCHEMY_RPC_URL
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: ALCHEMY_RPC_URL
+      - key: ALCHEMY_WS_URL
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: ALCHEMY_WS_URL
+      - key: JUPITER_API_BASE_URL
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: JUPITER_API_BASE_URL
+      - key: JUPITER_API_KEY
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: JUPITER_API_KEY
+      - key: DEXSCREENER_BASE_URL
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: DEXSCREENER_BASE_URL
+      - key: PUMP_PROGRAM_ID
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: PUMP_PROGRAM_ID
+      - key: POLL_INTERVAL_MS
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: POLL_INTERVAL_MS
+      - key: MONITOR_INTERVAL_MS
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: MONITOR_INTERVAL_MS
+      - key: SIGNAL_RATE_LIMIT_WINDOW_MS
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: SIGNAL_RATE_LIMIT_WINDOW_MS
+      - key: SIGNAL_RATE_LIMIT_MAX
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: SIGNAL_RATE_LIMIT_MAX
+      - key: SIGNAL_REPLAY_WINDOW_SECONDS
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: SIGNAL_REPLAY_WINDOW_SECONDS
+      - key: WORKER_FAILURE_ALERT_THRESHOLD
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: WORKER_FAILURE_ALERT_THRESHOLD
+      - key: WORKER_FAILURE_ALERT_WINDOW_MS
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: WORKER_FAILURE_ALERT_WINDOW_MS
+      - key: RPC_SLOT_LAG_THRESHOLD
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: RPC_SLOT_LAG_THRESHOLD
+      - key: RPC_HEALTH_CACHE_MS
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: RPC_HEALTH_CACHE_MS
+      - key: RPC_REQUEST_TIMEOUT_MS
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: RPC_REQUEST_TIMEOUT_MS
+      - key: TX_CONFIRMATION_TIMEOUT_MS
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: TX_CONFIRMATION_TIMEOUT_MS
+      - key: WS_HEARTBEAT_MS
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: WS_HEARTBEAT_MS
+      - key: WS_FREEZE_THRESHOLD_MS
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: WS_FREEZE_THRESHOLD_MS
+      - key: WS_RECONNECT_BASE_MS
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: WS_RECONNECT_BASE_MS
+      - key: WS_RECONNECT_MAX_MS
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: WS_RECONNECT_MAX_MS
+      - key: SNIPER_ENABLE_DEXSCREENER
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: SNIPER_ENABLE_DEXSCREENER
+      - key: SNIPER_WARMUP_MS
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: SNIPER_WARMUP_MS
+      - key: SNIPER_MOMENTUM_WINDOW_MS
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: SNIPER_MOMENTUM_WINDOW_MS
+      - key: SNIPER_PROCESSED_SIGNATURE_TTL_MS
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: SNIPER_PROCESSED_SIGNATURE_TTL_MS
+      - key: SNIPER_MAX_TRACKED_TOKENS
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: SNIPER_MAX_TRACKED_TOKENS
+      - key: SNIPER_MIN_INITIAL_LIQUIDITY_SOL
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: SNIPER_MIN_INITIAL_LIQUIDITY_SOL
+      - key: SNIPER_MAX_CURVE_PROGRESS_PCT
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: SNIPER_MAX_CURVE_PROGRESS_PCT
+      - key: SNIPER_MAX_DEV_WALLET_PCT
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: SNIPER_MAX_DEV_WALLET_PCT
+      - key: SNIPER_MAX_TOP_HOLDER_PCT
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: SNIPER_MAX_TOP_HOLDER_PCT
+      - key: SNIPER_MAX_BUY_BURST_COUNT
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: SNIPER_MAX_BUY_BURST_COUNT
+      - key: SNIPER_MIN_UNIQUE_BUYER_RATIO
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: SNIPER_MIN_UNIQUE_BUYER_RATIO
+      - key: SNIPER_MAX_SUSPICIOUS_WALLETS
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: SNIPER_MAX_SUSPICIOUS_WALLETS
+      - key: SKIP_PREFLIGHT_ON_VERY_HIGH_PRIORITY
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: SKIP_PREFLIGHT_ON_VERY_HIGH_PRIORITY
+
+  - type: worker
+    name: solana-telegram-execution-worker
+    runtime: node
+    plan: starter
+    buildCommand: npm ci && npm run build
+    startCommand: npm run start:worker
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: solana-telegram-execution-db
+          property: connectionString
+      - key: DATABASE_SSL
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: DATABASE_SSL
+      - key: API_SHARED_SECRET
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: API_SHARED_SECRET
+      - key: TELEGRAM_BOT_TOKEN
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: TELEGRAM_BOT_TOKEN
+      - key: CUSTODY_MASTER_KEY
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: CUSTODY_MASTER_KEY
+      - key: SOLANA_RPC
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: SOLANA_RPC
+      - key: HELIUS_RPC_URL
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: HELIUS_RPC_URL
+      - key: HELIUS_WS_URL
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: HELIUS_WS_URL
+      - key: HELIUS_GATEKEEPER_RPC_URL
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: HELIUS_GATEKEEPER_RPC_URL
+      - key: ALCHEMY_RPC_URL
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: ALCHEMY_RPC_URL
+      - key: ALCHEMY_WS_URL
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: ALCHEMY_WS_URL
+      - key: JUPITER_API_BASE_URL
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: JUPITER_API_BASE_URL
+      - key: JUPITER_API_KEY
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: JUPITER_API_KEY
+      - key: DEXSCREENER_BASE_URL
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: DEXSCREENER_BASE_URL
+      - key: PUMP_PROGRAM_ID
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: PUMP_PROGRAM_ID
+      - key: POLL_INTERVAL_MS
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: POLL_INTERVAL_MS
+      - key: MONITOR_INTERVAL_MS
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: MONITOR_INTERVAL_MS
+      - key: SIGNAL_RATE_LIMIT_WINDOW_MS
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: SIGNAL_RATE_LIMIT_WINDOW_MS
+      - key: SIGNAL_RATE_LIMIT_MAX
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: SIGNAL_RATE_LIMIT_MAX
+      - key: SIGNAL_REPLAY_WINDOW_SECONDS
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: SIGNAL_REPLAY_WINDOW_SECONDS
+      - key: WORKER_FAILURE_ALERT_THRESHOLD
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: WORKER_FAILURE_ALERT_THRESHOLD
+      - key: WORKER_FAILURE_ALERT_WINDOW_MS
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: WORKER_FAILURE_ALERT_WINDOW_MS
+      - key: RPC_SLOT_LAG_THRESHOLD
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: RPC_SLOT_LAG_THRESHOLD
+      - key: RPC_HEALTH_CACHE_MS
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: RPC_HEALTH_CACHE_MS
+      - key: RPC_REQUEST_TIMEOUT_MS
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: RPC_REQUEST_TIMEOUT_MS
+      - key: TX_CONFIRMATION_TIMEOUT_MS
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: TX_CONFIRMATION_TIMEOUT_MS
+      - key: WS_HEARTBEAT_MS
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: WS_HEARTBEAT_MS
+      - key: WS_FREEZE_THRESHOLD_MS
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: WS_FREEZE_THRESHOLD_MS
+      - key: WS_RECONNECT_BASE_MS
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: WS_RECONNECT_BASE_MS
+      - key: WS_RECONNECT_MAX_MS
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: WS_RECONNECT_MAX_MS
+      - key: SNIPER_ENABLE_DEXSCREENER
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: SNIPER_ENABLE_DEXSCREENER
+      - key: SNIPER_WARMUP_MS
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: SNIPER_WARMUP_MS
+      - key: SNIPER_MOMENTUM_WINDOW_MS
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: SNIPER_MOMENTUM_WINDOW_MS
+      - key: SNIPER_PROCESSED_SIGNATURE_TTL_MS
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: SNIPER_PROCESSED_SIGNATURE_TTL_MS
+      - key: SNIPER_MAX_TRACKED_TOKENS
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: SNIPER_MAX_TRACKED_TOKENS
+      - key: SNIPER_MIN_INITIAL_LIQUIDITY_SOL
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: SNIPER_MIN_INITIAL_LIQUIDITY_SOL
+      - key: SNIPER_MAX_CURVE_PROGRESS_PCT
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: SNIPER_MAX_CURVE_PROGRESS_PCT
+      - key: SNIPER_MAX_DEV_WALLET_PCT
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: SNIPER_MAX_DEV_WALLET_PCT
+      - key: SNIPER_MAX_TOP_HOLDER_PCT
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: SNIPER_MAX_TOP_HOLDER_PCT
+      - key: SNIPER_MAX_BUY_BURST_COUNT
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: SNIPER_MAX_BUY_BURST_COUNT
+      - key: SNIPER_MIN_UNIQUE_BUYER_RATIO
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: SNIPER_MIN_UNIQUE_BUYER_RATIO
+      - key: SNIPER_MAX_SUSPICIOUS_WALLETS
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: SNIPER_MAX_SUSPICIOUS_WALLETS
+      - key: SKIP_PREFLIGHT_ON_VERY_HIGH_PRIORITY
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: SKIP_PREFLIGHT_ON_VERY_HIGH_PRIORITY
+
+  - type: worker
+    name: solana-telegram-execution-monitor
+    runtime: node
+    plan: starter
+    buildCommand: npm ci && npm run build
+    startCommand: npm run start:monitor
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: solana-telegram-execution-db
+          property: connectionString
+      - key: DATABASE_SSL
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: DATABASE_SSL
+      - key: API_SHARED_SECRET
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: API_SHARED_SECRET
+      - key: TELEGRAM_BOT_TOKEN
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: TELEGRAM_BOT_TOKEN
+      - key: CUSTODY_MASTER_KEY
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: CUSTODY_MASTER_KEY
+      - key: SOLANA_RPC
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: SOLANA_RPC
+      - key: HELIUS_RPC_URL
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: HELIUS_RPC_URL
+      - key: HELIUS_WS_URL
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: HELIUS_WS_URL
+      - key: HELIUS_GATEKEEPER_RPC_URL
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: HELIUS_GATEKEEPER_RPC_URL
+      - key: ALCHEMY_RPC_URL
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: ALCHEMY_RPC_URL
+      - key: ALCHEMY_WS_URL
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: ALCHEMY_WS_URL
+      - key: JUPITER_API_BASE_URL
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: JUPITER_API_BASE_URL
+      - key: JUPITER_API_KEY
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: JUPITER_API_KEY
+      - key: DEXSCREENER_BASE_URL
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: DEXSCREENER_BASE_URL
+      - key: PUMP_PROGRAM_ID
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: PUMP_PROGRAM_ID
+      - key: POLL_INTERVAL_MS
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: POLL_INTERVAL_MS
+      - key: MONITOR_INTERVAL_MS
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: MONITOR_INTERVAL_MS
+      - key: SIGNAL_RATE_LIMIT_WINDOW_MS
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: SIGNAL_RATE_LIMIT_WINDOW_MS
+      - key: SIGNAL_RATE_LIMIT_MAX
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: SIGNAL_RATE_LIMIT_MAX
+      - key: SIGNAL_REPLAY_WINDOW_SECONDS
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: SIGNAL_REPLAY_WINDOW_SECONDS
+      - key: WORKER_FAILURE_ALERT_THRESHOLD
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: WORKER_FAILURE_ALERT_THRESHOLD
+      - key: WORKER_FAILURE_ALERT_WINDOW_MS
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: WORKER_FAILURE_ALERT_WINDOW_MS
+      - key: RPC_SLOT_LAG_THRESHOLD
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: RPC_SLOT_LAG_THRESHOLD
+      - key: RPC_HEALTH_CACHE_MS
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: RPC_HEALTH_CACHE_MS
+      - key: RPC_REQUEST_TIMEOUT_MS
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: RPC_REQUEST_TIMEOUT_MS
+      - key: TX_CONFIRMATION_TIMEOUT_MS
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: TX_CONFIRMATION_TIMEOUT_MS
+      - key: WS_HEARTBEAT_MS
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: WS_HEARTBEAT_MS
+      - key: WS_FREEZE_THRESHOLD_MS
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: WS_FREEZE_THRESHOLD_MS
+      - key: WS_RECONNECT_BASE_MS
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: WS_RECONNECT_BASE_MS
+      - key: WS_RECONNECT_MAX_MS
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: WS_RECONNECT_MAX_MS
+      - key: SNIPER_ENABLE_DEXSCREENER
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: SNIPER_ENABLE_DEXSCREENER
+      - key: SNIPER_WARMUP_MS
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: SNIPER_WARMUP_MS
+      - key: SNIPER_MOMENTUM_WINDOW_MS
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: SNIPER_MOMENTUM_WINDOW_MS
+      - key: SNIPER_PROCESSED_SIGNATURE_TTL_MS
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: SNIPER_PROCESSED_SIGNATURE_TTL_MS
+      - key: SNIPER_MAX_TRACKED_TOKENS
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: SNIPER_MAX_TRACKED_TOKENS
+      - key: SNIPER_MIN_INITIAL_LIQUIDITY_SOL
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: SNIPER_MIN_INITIAL_LIQUIDITY_SOL
+      - key: SNIPER_MAX_CURVE_PROGRESS_PCT
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: SNIPER_MAX_CURVE_PROGRESS_PCT
+      - key: SNIPER_MAX_DEV_WALLET_PCT
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: SNIPER_MAX_DEV_WALLET_PCT
+      - key: SNIPER_MAX_TOP_HOLDER_PCT
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: SNIPER_MAX_TOP_HOLDER_PCT
+      - key: SNIPER_MAX_BUY_BURST_COUNT
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: SNIPER_MAX_BUY_BURST_COUNT
+      - key: SNIPER_MIN_UNIQUE_BUYER_RATIO
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: SNIPER_MIN_UNIQUE_BUYER_RATIO
+      - key: SNIPER_MAX_SUSPICIOUS_WALLETS
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: SNIPER_MAX_SUSPICIOUS_WALLETS
+      - key: SKIP_PREFLIGHT_ON_VERY_HIGH_PRIORITY
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: SKIP_PREFLIGHT_ON_VERY_HIGH_PRIORITY
+
+  - type: worker
+    name: solana-telegram-execution-sniper
+    runtime: node
+    plan: starter
+    buildCommand: npm ci && npm run build
+    startCommand: npm run start:sniper
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: solana-telegram-execution-db
+          property: connectionString
+      - key: DATABASE_SSL
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: DATABASE_SSL
+      - key: API_SHARED_SECRET
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: API_SHARED_SECRET
+      - key: TELEGRAM_BOT_TOKEN
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: TELEGRAM_BOT_TOKEN
+      - key: CUSTODY_MASTER_KEY
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: CUSTODY_MASTER_KEY
+      - key: SOLANA_RPC
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: SOLANA_RPC
+      - key: HELIUS_RPC_URL
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: HELIUS_RPC_URL
+      - key: HELIUS_WS_URL
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: HELIUS_WS_URL
+      - key: HELIUS_GATEKEEPER_RPC_URL
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: HELIUS_GATEKEEPER_RPC_URL
+      - key: ALCHEMY_RPC_URL
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: ALCHEMY_RPC_URL
+      - key: ALCHEMY_WS_URL
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: ALCHEMY_WS_URL
+      - key: JUPITER_API_BASE_URL
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: JUPITER_API_BASE_URL
+      - key: JUPITER_API_KEY
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: JUPITER_API_KEY
+      - key: DEXSCREENER_BASE_URL
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: DEXSCREENER_BASE_URL
+      - key: PUMP_PROGRAM_ID
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: PUMP_PROGRAM_ID
+      - key: POLL_INTERVAL_MS
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: POLL_INTERVAL_MS
+      - key: MONITOR_INTERVAL_MS
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: MONITOR_INTERVAL_MS
+      - key: SIGNAL_RATE_LIMIT_WINDOW_MS
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: SIGNAL_RATE_LIMIT_WINDOW_MS
+      - key: SIGNAL_RATE_LIMIT_MAX
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: SIGNAL_RATE_LIMIT_MAX
+      - key: SIGNAL_REPLAY_WINDOW_SECONDS
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: SIGNAL_REPLAY_WINDOW_SECONDS
+      - key: WORKER_FAILURE_ALERT_THRESHOLD
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: WORKER_FAILURE_ALERT_THRESHOLD
+      - key: WORKER_FAILURE_ALERT_WINDOW_MS
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: WORKER_FAILURE_ALERT_WINDOW_MS
+      - key: RPC_SLOT_LAG_THRESHOLD
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: RPC_SLOT_LAG_THRESHOLD
+      - key: RPC_HEALTH_CACHE_MS
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: RPC_HEALTH_CACHE_MS
+      - key: RPC_REQUEST_TIMEOUT_MS
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: RPC_REQUEST_TIMEOUT_MS
+      - key: TX_CONFIRMATION_TIMEOUT_MS
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: TX_CONFIRMATION_TIMEOUT_MS
+      - key: WS_HEARTBEAT_MS
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: WS_HEARTBEAT_MS
+      - key: WS_FREEZE_THRESHOLD_MS
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: WS_FREEZE_THRESHOLD_MS
+      - key: WS_RECONNECT_BASE_MS
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: WS_RECONNECT_BASE_MS
+      - key: WS_RECONNECT_MAX_MS
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: WS_RECONNECT_MAX_MS
+      - key: SNIPER_ENABLE_DEXSCREENER
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: SNIPER_ENABLE_DEXSCREENER
+      - key: SNIPER_WARMUP_MS
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: SNIPER_WARMUP_MS
+      - key: SNIPER_MOMENTUM_WINDOW_MS
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: SNIPER_MOMENTUM_WINDOW_MS
+      - key: SNIPER_PROCESSED_SIGNATURE_TTL_MS
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: SNIPER_PROCESSED_SIGNATURE_TTL_MS
+      - key: SNIPER_MAX_TRACKED_TOKENS
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: SNIPER_MAX_TRACKED_TOKENS
+      - key: SNIPER_MIN_INITIAL_LIQUIDITY_SOL
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: SNIPER_MIN_INITIAL_LIQUIDITY_SOL
+      - key: SNIPER_MAX_CURVE_PROGRESS_PCT
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: SNIPER_MAX_CURVE_PROGRESS_PCT
+      - key: SNIPER_MAX_DEV_WALLET_PCT
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: SNIPER_MAX_DEV_WALLET_PCT
+      - key: SNIPER_MAX_TOP_HOLDER_PCT
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: SNIPER_MAX_TOP_HOLDER_PCT
+      - key: SNIPER_MAX_BUY_BURST_COUNT
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: SNIPER_MAX_BUY_BURST_COUNT
+      - key: SNIPER_MIN_UNIQUE_BUYER_RATIO
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: SNIPER_MIN_UNIQUE_BUYER_RATIO
+      - key: SNIPER_MAX_SUSPICIOUS_WALLETS
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: SNIPER_MAX_SUSPICIOUS_WALLETS
+      - key: SKIP_PREFLIGHT_ON_VERY_HIGH_PRIORITY
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: SKIP_PREFLIGHT_ON_VERY_HIGH_PRIORITY
