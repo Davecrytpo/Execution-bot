@@ -21,6 +21,11 @@ export type WalletRecord = {
   export_shown_at: string | null;
 };
 
+export type WalletBalanceSnapshot = {
+  balanceSol: number | null;
+  checkedAt: string | null;
+};
+
 export async function ensureUser(identity: Identity): Promise<string> {
   const result = await query<{ id: string }>(
     `
@@ -299,6 +304,55 @@ export async function getWalletBalanceLamports(publicKey: string): Promise<numbe
   return rpcPool.withConnection(
     (connection) => connection.getBalance(new PublicKey(publicKey))
   );
+}
+
+export async function getCachedWalletBalance(walletId: string): Promise<WalletBalanceSnapshot> {
+  const result = await query<{
+    last_balance_lamports: string;
+    last_checked_at: string | null;
+  }>(
+    `
+    SELECT last_balance_lamports::text, last_checked_at::text
+    FROM wallet_state
+    WHERE wallet_id = $1
+    `,
+    [walletId]
+  );
+
+  const row = result.rows[0];
+  if (!row) {
+    return {
+      balanceSol: null,
+      checkedAt: null
+    };
+  }
+
+  return {
+    balanceSol: Number(row.last_balance_lamports) / 1_000_000_000,
+    checkedAt: row.last_checked_at
+  };
+}
+
+export async function refreshWalletBalanceCache(walletId: string, publicKey: string): Promise<WalletBalanceSnapshot> {
+  const lamports = await getWalletBalanceLamports(publicKey);
+  const checkedAt = new Date().toISOString();
+
+  await query(
+    `
+    INSERT INTO wallet_state (wallet_id, last_balance_lamports, last_checked_at, updated_at)
+    VALUES ($1, $2, $3::timestamptz, NOW())
+    ON CONFLICT (wallet_id) DO UPDATE
+    SET last_balance_lamports = EXCLUDED.last_balance_lamports,
+        last_checked_at = EXCLUDED.last_checked_at,
+        updated_at = NOW()
+    `,
+    [walletId, lamports, checkedAt]
+  );
+
+  return {
+    balanceSol: lamports / 1_000_000_000,
+    checkedAt
+  };
 }
 
 export async function getDepositHistory(userId: string) {

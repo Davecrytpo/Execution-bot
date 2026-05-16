@@ -1,8 +1,10 @@
+import { readFile } from 'node:fs/promises';
 import { config } from '../config.js';
 
 type TelegramMethod =
   | 'getUpdates'
   | 'sendMessage'
+  | 'sendPhoto'
   | 'editMessageText'
   | 'answerCallbackQuery'
   | 'setMyCommands'
@@ -49,6 +51,11 @@ type ReplyKeyboardRemove = {
 type ReplyMarkup = InlineKeyboardMarkup | ReplyKeyboardMarkup | ReplyKeyboardRemove;
 
 type SendMessageOptions = {
+  replyMarkup?: ReplyMarkup;
+};
+
+type SendPhotoOptions = {
+  caption?: string;
   replyMarkup?: ReplyMarkup;
 };
 
@@ -105,6 +112,45 @@ export async function sendMessage(
     parse_mode: 'Markdown',
     reply_markup: options?.replyMarkup
   });
+}
+
+export async function sendPhoto(
+  chatId: number | string,
+  photoPath: string,
+  options?: SendPhotoOptions
+): Promise<TelegramMessage> {
+  if (!config.telegramBotToken) {
+    throw new Error('TELEGRAM_BOT_TOKEN is required');
+  }
+
+  const photo = await readFile(photoPath);
+  const form = new FormData();
+  form.set('chat_id', String(chatId));
+  form.set('photo', new Blob([photo]), photoPath.split(/[\\/]/).pop() ?? 'image.png');
+
+  if (options?.caption) {
+    form.set('caption', options.caption);
+  }
+
+  if (options?.replyMarkup) {
+    form.set('reply_markup', JSON.stringify(options.replyMarkup));
+  }
+
+  const response = await fetch(`https://api.telegram.org/bot${config.telegramBotToken}/sendPhoto`, {
+    method: 'POST',
+    body: form
+  });
+
+  if (!response.ok) {
+    throw new Error(`telegram_http_${response.status}`);
+  }
+
+  const data = await response.json() as { ok: boolean; result: TelegramMessage; description?: string };
+  if (!data.ok) {
+    throw new Error(data.description ?? 'telegram_api_error');
+  }
+
+  return data.result;
 }
 
 export async function editMessageText(

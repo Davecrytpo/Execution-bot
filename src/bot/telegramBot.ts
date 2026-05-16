@@ -1,4 +1,5 @@
 import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 import { PublicKey } from '@solana/web3.js';
 import { config } from '../config.js';
 import {
@@ -7,12 +8,14 @@ import {
   editMessageText,
   getUpdates,
   sendMessage,
+  sendPhoto,
   setCommands,
   type InlineKeyboardButton,
   type TelegramUpdate
 } from '../lib/telegram.js';
 import {
   createWithdrawalRequest,
+  getCachedWalletBalance,
   getDepositHistory,
   exportWalletSecret,
   getLatestDecisionReason,
@@ -20,8 +23,8 @@ import {
   getOrCreateWallet,
   getRecentOrders,
   getUserSettings,
-  getWalletBalance,
   getWithdrawalHistory,
+  refreshWalletBalanceCache,
   updateUserSettings
 } from '../services/custodyService.js';
 import { enqueueManualTradeForUser } from '../services/executionService.js';
@@ -38,6 +41,7 @@ const TURBO_MAX_OPEN_POSITIONS_PER_SOURCE = 3;
 const TURBO_TOKEN_COOLDOWN_MINUTES = 10;
 const TURBO_DUPLICATE_WINDOW_SECONDS = 90;
 const LAMPORTS_PER_SOL = 1_000_000_000;
+const START_BANNER_PATH = join(process.cwd(), 'assets', 'telegram-logo.png');
 
 type DashboardView =
   | 'home'
@@ -127,6 +131,7 @@ const VIEW_PARENT: Partial<Record<DashboardView, DashboardView>> = {
 
 const dashboardSessionByChat = new Map<number, DashboardSession>();
 const pendingWithdrawConfirmByChat = new Map<number, WithdrawalConfirmation>();
+const startBannerShownByChat = new Set<number>();
 
 function button(text: string, callbackData: string): InlineKeyboardButton {
   return { text, callback_data: callbackData };
@@ -187,6 +192,42 @@ function formatSol(value: number | string | null | undefined, digits = 4) {
   return Number.isFinite(numeric) ? numeric.toFixed(digits) : '0.0000';
 }
 
+function formatCheckedAt(value: string | null | undefined) {
+  if (!value) {
+    return 'Not synced yet';
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return `${date.toISOString().replace('T', ' ').slice(0, 16)} UTC`;
+}
+
+function humanizeErrorMessage(error: unknown) {
+  const message = String(error instanceof Error ? error.message : error ?? 'unknown_error');
+  const knownMessages: Record<string, string> = {
+    withdrawal_exceeds_max_per_tx: 'This withdrawal is above your single-transaction limit.',
+    withdrawal_exceeds_daily_limit: 'This withdrawal would exceed your daily withdrawal limit.',
+    withdraw_destination_cooldown_active: 'You recently changed withdrawal destination. Please wait for the cooldown window to end.',
+    user_not_found: 'Your user profile was not found. Please try /start again.',
+    user_or_wallet_not_found: 'Your wallet was not found. Please reopen the dashboard with /menu.',
+    rpc_send_no_endpoints: 'No healthy RPC endpoint is available right now. Please try again shortly.',
+    rpc_all_failed: 'Live Solana RPC is temporarily unavailable. Please try again shortly.'
+  };
+
+  if (knownMessages[message]) {
+    return knownMessages[message];
+  }
+
+  if (message.startsWith('rpc_all_failed:')) {
+    return 'Live Solana RPC is temporarily unavailable. Please try again shortly.';
+  }
+
+  return message.replace(/[_`*[\]]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
 function pendingPrompt(input?: PendingInput): string | undefined {
   if (!input) {
     return undefined;
@@ -235,11 +276,14 @@ function composeDashboardText(title: string, body: string[], notice?: string, pr
   return lines.join('\n');
 }
 
-async function safeWalletBalance(publicKey: string) {
+async function safeCachedWalletBalance(walletId: string) {
   try {
-    return await getWalletBalance(publicKey);
+    return await getCachedWalletBalance(walletId);
   } catch {
-    return null;
+    return {
+      balanceSol: null,
+      checkedAt: null
+    };
   }
 }
 
@@ -249,6 +293,10 @@ function isCallbackUpdate(update: TelegramUpdate): boolean {
 
 function getCallbackMessageId(update: TelegramUpdate) {
   return update.callback_query?.message?.message_id;
+}
+
+function getUpdateChatId(update: TelegramUpdate) {
+  return update.message?.chat.id ?? update.callback_query?.message?.chat.id ?? null;
 }
 
 async function getIdentity(update: TelegramUpdate): Promise<BotIdentity | null> {
@@ -277,6 +325,12 @@ async function audit(identity: BotIdentity, action: string, metadata?: Record<st
     chatId: identity.chatId,
     action,
     metadata
+  });
+}
+
+async function sendStartBanner(chatId: number) {
+  await sendPhoto(chatId, START_BANNER_PATH, {
+    caption: 'Execution Bot\nModern Solana trading dashboard for wallet, trading, safety, and analytics.'
   });
 }
 
@@ -410,17 +464,18 @@ async function buildDashboardView(identity: BotIdentity, session: DashboardSessi
 
 async function renderHomeView(identity: BotIdentity, notice?: string, prompt?: string): Promise<DashboardRender> {
   const settings = await getUserSettings(identity.walletContext.userId);
-  const balance = await safeWalletBalance(identity.walletContext.wallet.public_key);
+  const balance = await safeCachedWalletBalance(identity.walletContext.wallet.id);
 
   const body = [
     '*Overview*',
-    `Wallet balance: \`${balance === null ? 'unavailable' : `${formatSol(balance)} SOL`}\``,
+    `Wallet balance: \`${balance.balanceSol === null ? 'Tap Wallet to sync' : `${formatSol(balance.balanceSol)} SOL`}\``,
+    `Balance sync: \`${formatCheckedAt(balance.checkedAt)}\``,
     `Auto Buy: \`${settings.auto_buy_enabled ? 'ON' : 'OFF'}\``,
     `Auto Sell: \`${settings.auto_sell_enabled ? 'ON' : 'OFF'}\``,
     `Signal mode: \`${sourceModeLabel(settings.allowed_sources)}\``,
     `Risk mode: \`${settings.degen_turbo_enabled ? 'Turbo Guarded' : 'Standard'}\``,
     '',
-    'Choose a section below to manage your bot like a trading app.'
+    'Choose a section below to manage your bot like a clean trading dashboard.'
   ];
 
   return {
@@ -437,25 +492,26 @@ async function renderHomeView(identity: BotIdentity, notice?: string, prompt?: s
 
 async function renderWalletView(identity: BotIdentity, notice?: string, prompt?: string): Promise<DashboardRender> {
   const settings = await getUserSettings(identity.walletContext.userId);
-  const balance = await safeWalletBalance(identity.walletContext.wallet.public_key);
+  const balance = await safeCachedWalletBalance(identity.walletContext.wallet.id);
 
   const body = [
     '*Wallet*',
     `Address: \`${identity.walletContext.wallet.public_key}\``,
-    `Balance: \`${balance === null ? 'unavailable' : `${formatSol(balance)} SOL`}\``,
+    `Balance: \`${balance.balanceSol === null ? 'Tap Sync Live Balance' : `${formatSol(balance.balanceSol)} SOL`}\``,
+    `Last sync: \`${formatCheckedAt(balance.checkedAt)}\``,
     `Withdraw max per tx: \`${formatSol(settings.withdraw_max_per_tx_sol, 3)} SOL\``,
     `Withdraw daily limit: \`${formatSol(settings.withdraw_daily_limit_sol, 3)} SOL\``,
     `Destination cooldown: \`${settings.withdraw_address_cooldown_minutes} minutes\``,
     '',
-    'Use the actions below for deposits, withdrawals, and key export.'
+    'Use the actions below for live balance sync, deposits, withdrawals, and secure key export.'
   ];
 
   return {
     text: composeDashboardText('Wallet', body, notice, prompt),
     buttons: [
-      [button('Refresh Balance', 'view:wallet'), button('Deposits', 'view:wallet_deposits')],
+      [button('Refresh Balance', 'act:wallet_refresh'), button('Deposits', 'view:wallet_deposits')],
       [button('Withdraw', 'prompt:withdraw'), button('Withdrawal History', 'view:wallet_withdrawals')],
-      [button('Reveal Private Key', 'view:wallet_export_confirm')],
+      [button('Private Key Export', 'view:wallet_export_confirm')],
       ...navRows('wallet')
     ]
   };
@@ -833,9 +889,18 @@ async function showStartExperience(update: TelegramUpdate) {
     return;
   }
 
+  if (!startBannerShownByChat.has(identity.chatId)) {
+    try {
+      await sendStartBanner(identity.chatId);
+      startBannerShownByChat.add(identity.chatId);
+    } catch (error: any) {
+      logger.error('telegram_start_banner_failed', { message: error.message });
+    }
+  }
+
   const notice = identity.walletContext.exportedKey
     ? 'Your wallet is ready. Save the private key sent below before trading.'
-    : 'Your trading dashboard is ready.';
+    : 'Your dashboard is live. Use the buttons below instead of typing long command lists.';
   await showDashboard(identity, 'home', notice);
 
   if (identity.walletContext.exportedKey) {
@@ -902,7 +967,12 @@ async function confirmPendingWithdrawal(identity: BotIdentity, providedCode?: st
       preferredMessageId
     );
   } catch (error: any) {
-    await showDashboard(identity, 'wallet_withdraw_confirm', `Withdrawal blocked: ${error.message}`, preferredMessageId);
+    await showDashboard(
+      identity,
+      'wallet_withdraw_confirm',
+      `Withdrawal blocked: ${humanizeErrorMessage(error)}`,
+      preferredMessageId
+    );
   }
 }
 
@@ -1069,7 +1139,7 @@ async function processPendingInput(update: TelegramUpdate, text: string) {
       return true;
     }
 
-    await showDashboard(identity, session.view, error.message, undefined, true);
+    await showDashboard(identity, session.view, humanizeErrorMessage(error), undefined, true);
     return true;
   }
 }
@@ -1147,6 +1217,19 @@ async function handleCallbackQuery(update: TelegramUpdate) {
       case 'view:support':
         await showDashboard(identity, 'support', undefined, preferredMessageId);
         return;
+      case 'act:wallet_refresh': {
+        const balance = await refreshWalletBalanceCache(
+          identity.walletContext.wallet.id,
+          identity.walletContext.wallet.public_key
+        );
+        await showDashboard(
+          identity,
+          'wallet',
+          `Live balance synced successfully: ${formatSol(balance.balanceSol)} SOL.`,
+          preferredMessageId
+        );
+        return;
+      }
       case 'prompt:trade':
         session.pendingInput = { kind: 'trade_mint' };
         await showDashboard(identity, 'trading', 'Manual trade started.', preferredMessageId, true);
@@ -1612,7 +1695,22 @@ export async function startTelegramBot(signal?: AbortSignal) {
           break;
         }
         offset = update.update_id + 1;
-        await handleIncomingUpdate(update);
+        try {
+          await handleIncomingUpdate(update);
+        } catch (error: any) {
+          logger.error('telegram_update_handle_error', {
+            updateId: update.update_id,
+            message: error.message
+          });
+
+          const chatId = getUpdateChatId(update);
+          if (chatId) {
+            await sendMessage(
+              chatId,
+              'Something went wrong while handling that action. Send /menu to reopen the dashboard.'
+            ).catch(() => undefined);
+          }
+        }
       }
     } catch (error: any) {
       if (signal?.aborted) {

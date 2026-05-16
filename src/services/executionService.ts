@@ -63,6 +63,13 @@ function maybeNumber(value: unknown) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function humanizeExecutionError(error: unknown) {
+  return String(error instanceof Error ? error.message : error ?? 'unknown_error')
+    .replace(/[_`*[\]]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function getJupiterHeaders() {
   return {
     'Content-Type': 'application/json',
@@ -649,7 +656,7 @@ export async function processNextOrder() {
     );
 
     incMetric('orders.failed');
-    await sendMessage(order.chat_id, `Trade failed for \`${order.mint}\`: ${error.message}`);
+    await sendMessage(order.chat_id, `Trade failed for \`${order.mint}\`: ${humanizeExecutionError(error)}`);
     if (registerFailure(`order:${order.user_id}`)) {
       await sendMessage(order.chat_id, 'Alert: multiple order failures detected recently. Review settings and RPC health.');
     }
@@ -744,7 +751,7 @@ export async function processNextWithdrawal() {
       `,
       [request.id, error.message]
     );
-    await sendMessage(request.chat_id, `Withdrawal failed: ${error.message}`);
+    await sendMessage(request.chat_id, `Withdrawal failed: ${humanizeExecutionError(error)}`);
     incMetric('withdrawals.failed');
     if (registerFailure(`withdrawal:${request.user_id}`)) {
       await sendMessage(request.chat_id, 'Alert: multiple withdrawal failures detected recently.');
