@@ -1,7 +1,9 @@
 import { fileURLToPath } from 'node:url';
 import { PublicKey } from '@solana/web3.js';
+import { config } from '../config.js';
 import {
   answerCallbackQuery,
+  deleteWebhook,
   editMessageText,
   getUpdates,
   sendMessage,
@@ -775,11 +777,15 @@ async function renderSniperView(identity: BotIdentity, notice?: string, prompt?:
 
   const body = [
     '*Sniper Status*',
+    `Worker status: \`${config.enableSniperWorker ? 'LIVE' : 'PAUSED'}\``,
     `Pump.fun enabled: \`${pumpfunEnabled ? 'YES' : 'NO'}\``,
     `DexScreener enabled: \`${dexscreenerEnabled ? 'YES' : 'NO'}\``,
     `Min score: \`${settings.min_score}\``,
     `Auto Buy: \`${settings.auto_buy_enabled ? 'ON' : 'OFF'}\``,
-    `Max buy size: \`${formatSol(settings.max_buy_sol, 4)} SOL\``
+    `Max buy size: \`${formatSol(settings.max_buy_sol, 4)} SOL\``,
+    config.enableSniperWorker
+      ? 'Live launch monitoring is active for this deployment.'
+      : 'Live launch monitoring is paused in this deployment profile to keep free hosting stable.'
   ];
 
   return {
@@ -1592,6 +1598,9 @@ async function handleIncomingUpdate(update: TelegramUpdate) {
 }
 
 export async function startTelegramBot(signal?: AbortSignal) {
+  await deleteWebhook(false).catch((error: any) => {
+    logger.error('telegram_delete_webhook_failed', { message: error.message });
+  });
   await setCommands();
   let offset = 0;
 
@@ -1608,6 +1617,13 @@ export async function startTelegramBot(signal?: AbortSignal) {
     } catch (error: any) {
       if (signal?.aborted) {
         break;
+      }
+      if (error.message === 'telegram_http_409') {
+        logger.info('telegram_poll_conflict', {
+          message: 'Another bot polling session is active for this token. Backing off before retrying.'
+        });
+        await new Promise((resolve) => setTimeout(resolve, 10000));
+        continue;
       }
       logger.error('telegram_poll_error', { message: error.message });
       await new Promise((resolve) => setTimeout(resolve, 3000));

@@ -77,6 +77,8 @@ export class RpcPool {
   private readonly endpoints = buildEndpoints();
   private slotCache: { expiresAt: number; status: RpcStatus } | null = null;
   private lastPreferredEndpoint: RpcEndpointName | null = null;
+  private readonly endpointCooldownUntil = new Map<RpcEndpointName, number>();
+  private readonly endpointErrorLogUntil = new Map<string, number>();
 
   getPrimaryConnection() {
     return this.endpoints[0]?.connection ?? new Connection(config.solanaRpc, 'confirmed');
@@ -88,6 +90,30 @@ export class RpcPool {
 
   private getEndpointByName(name: RpcEndpointName) {
     return this.endpoints.find((endpoint) => endpoint.name === name) ?? null;
+  }
+
+  private isEndpointCoolingDown(name: RpcEndpointName) {
+    return (this.endpointCooldownUntil.get(name) ?? 0) > Date.now();
+  }
+
+  private markEndpointFailure(endpoint: RpcEndpoint, message: string) {
+    this.endpointCooldownUntil.set(endpoint.name, Date.now() + config.rpcEndpointCooldownMs);
+
+    const key = `${endpoint.name}:${message}`;
+    const nextAllowedLogAt = this.endpointErrorLogUntil.get(key) ?? 0;
+    if (Date.now() < nextAllowedLogAt) {
+      return;
+    }
+
+    this.endpointErrorLogUntil.set(key, Date.now() + config.rpcErrorLogCooldownMs);
+    logger.error('rpc_operation_failed', {
+      endpoint: endpoint.name,
+      message
+    });
+  }
+
+  private clearEndpointFailure(endpoint: RpcEndpoint) {
+    this.endpointCooldownUntil.delete(endpoint.name);
   }
 
   private async probeEndpoint(endpoint: RpcEndpoint): Promise<RpcEndpointHealth> {
@@ -179,23 +205,27 @@ export class RpcPool {
     const status = await this.getStatus();
     const healthByName = new Map(status.endpoints.map((endpoint) => [endpoint.name, endpoint]));
     const reachable = this.endpoints.filter((endpoint) => healthByName.get(endpoint.name)?.slot !== null);
+    const available = reachable.filter((endpoint) => !this.isEndpointCoolingDown(endpoint.name));
 
-    if (!reachable.length) {
+    if (!available.length && !reachable.length) {
       return this.endpoints;
     }
+
+    const candidateEndpoints = available.length ? available : reachable;
 
     if (preferPrimary) {
       const primaryHealth = healthByName.get('primary');
       const primaryEndpoint = this.getEndpointByName('primary');
       if (
         primaryEndpoint
+        && !this.isEndpointCoolingDown('primary')
         && primaryHealth
         && primaryHealth.slot !== null
         && (primaryHealth.lag ?? 0) <= config.rpcSlotLagThreshold
       ) {
         return [
           primaryEndpoint,
-          ...reachable
+          ...candidateEndpoints
             .filter((endpoint) => endpoint.name !== 'primary')
             .sort((left, right) => {
               const leftLag = healthByName.get(left.name)?.lag ?? Number.MAX_SAFE_INTEGER;
@@ -209,7 +239,7 @@ export class RpcPool {
       }
     }
 
-    return reachable.sort((left, right) => {
+    return candidateEndpoints.sort((left, right) => {
       const leftLag = healthByName.get(left.name)?.lag ?? Number.MAX_SAFE_INTEGER;
       const rightLag = healthByName.get(right.name)?.lag ?? Number.MAX_SAFE_INTEGER;
       if (leftLag !== rightLag) {
@@ -228,17 +258,16 @@ export class RpcPool {
 
     for (const endpoint of ordered) {
       try {
-        return await withTimeout(
+        const result = await withTimeout(
           fn(endpoint.connection, endpoint),
           options.timeoutMs ?? config.rpcRequestTimeoutMs,
           `${endpoint.name}:operation`
         );
+        this.clearEndpointFailure(endpoint);
+        return result;
       } catch (error: any) {
         errors.push(`${endpoint.name}:${error.message}`);
-        logger.error('rpc_operation_failed', {
-          endpoint: endpoint.name,
-          message: error.message
-        });
+        this.markEndpointFailure(endpoint, error.message);
       }
     }
 

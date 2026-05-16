@@ -5,7 +5,8 @@ type TelegramMethod =
   | 'sendMessage'
   | 'editMessageText'
   | 'answerCallbackQuery'
-  | 'setMyCommands';
+  | 'setMyCommands'
+  | 'deleteWebhook';
 
 export type TelegramUser = {
   id: number;
@@ -139,5 +140,11 @@ export async function setCommands(): Promise<void> {
       { command: 'help', description: 'Show onboarding and support help' },
       { command: 'close', description: 'Hide the dashboard' }
     ]
+  });
+}
+
+export async function deleteWebhook(dropPendingUpdates = false): Promise<void> {
+  await telegramRequest('deleteWebhook', {
+    drop_pending_updates: dropPendingUpdates
   });
 }

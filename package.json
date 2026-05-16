@@ -11,7 +11,7 @@
     "build:render-free": "npm run build && npm run migrate",
     "start:api": "node dist/index.js",
     "start:allinone": "node dist/allInOne.js",
-    "start:render-free": "node dist/allInOne.js",
+    "start:render-free": "node --max-old-space-size=384 dist/allInOneRenderFree.js",
     "start:bot": "node dist/bot/telegramBot.js",
     "start:worker": "node dist/workers/executor.js",
     "start:monitor": "node dist/workers/monitor.js",

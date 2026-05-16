@@ -1,5 +1,6 @@
 import { pool } from './lib/db.js';
 import { logger } from './lib/logger.js';
+import { config } from './config.js';
 import { startApi } from './index.js';
 import { startTelegramBot } from './bot/telegramBot.js';
 import { startExecutorWorker } from './workers/executor.js';
@@ -11,12 +12,27 @@ async function main() {
   const server = startApi();
   let shuttingDown = false;
 
-  const backgroundTasks = [
-    startTelegramBot(abortController.signal),
-    startExecutorWorker(abortController.signal),
-    startMonitorWorker(abortController.signal),
-    startSniperWorker(abortController.signal)
-  ];
+  const backgroundTasks: Array<Promise<unknown>> = [];
+
+  if (config.enableTelegramBot) {
+    backgroundTasks.push(startTelegramBot(abortController.signal));
+  }
+  if (config.enableExecutorWorker) {
+    backgroundTasks.push(startExecutorWorker(abortController.signal));
+  }
+  if (config.enableMonitorWorker) {
+    backgroundTasks.push(startMonitorWorker(abortController.signal));
+  }
+  if (config.enableSniperWorker) {
+    backgroundTasks.push(startSniperWorker(abortController.signal));
+  }
+
+  logger.info('all_in_one_components_started', {
+    telegramBot: config.enableTelegramBot,
+    executorWorker: config.enableExecutorWorker,
+    monitorWorker: config.enableMonitorWorker,
+    sniperWorker: config.enableSniperWorker
+  });
 
   for (const task of backgroundTasks) {
     task.catch((error: any) => {

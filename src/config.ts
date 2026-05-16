@@ -77,6 +77,8 @@ export const config = {
   rpcSlotLagThreshold: toNumber(process.env.RPC_SLOT_LAG_THRESHOLD, 15, 1),
   rpcHealthCacheMs: toNumber(process.env.RPC_HEALTH_CACHE_MS, 5000, 250),
   rpcRequestTimeoutMs: toNumber(process.env.RPC_REQUEST_TIMEOUT_MS, 10000, 1000),
+  rpcEndpointCooldownMs: toNumber(process.env.RPC_ENDPOINT_COOLDOWN_MS, 30000, 1000),
+  rpcErrorLogCooldownMs: toNumber(process.env.RPC_ERROR_LOG_COOLDOWN_MS, 15000, 1000),
   txConfirmationTimeoutMs: toNumber(process.env.TX_CONFIRMATION_TIMEOUT_MS, 60000, 5000),
   wsHeartbeatMs: toNumber(process.env.WS_HEARTBEAT_MS, 30000, 1000),
   wsFreezeThresholdMs: toNumber(process.env.WS_FREEZE_THRESHOLD_MS, 90000, 5000),
@@ -94,5 +96,10 @@ export const config = {
   sniperMaxBuyBurstCount: toNumber(process.env.SNIPER_MAX_BUY_BURST_COUNT, 36, 1),
   sniperMinUniqueBuyerRatio: toNumber(process.env.SNIPER_MIN_UNIQUE_BUYER_RATIO, 0.55, 0),
   sniperMaxSuspiciousWallets: toNumber(process.env.SNIPER_MAX_SUSPICIOUS_WALLETS, 2, 0),
-  skipPreflightOnVeryHighPriority: toBoolean(process.env.SKIP_PREFLIGHT_ON_VERY_HIGH_PRIORITY, true)
+  skipPreflightOnVeryHighPriority: toBoolean(process.env.SKIP_PREFLIGHT_ON_VERY_HIGH_PRIORITY, true),
+  enableTelegramBot: toBoolean(process.env.ENABLE_TELEGRAM_BOT, true),
+  enableExecutorWorker: toBoolean(process.env.ENABLE_EXECUTOR_WORKER, true),
+  enableMonitorWorker: toBoolean(process.env.ENABLE_MONITOR_WORKER, true),
+  enableSniperWorker: toBoolean(process.env.ENABLE_SNIPER_WORKER, true),
+  enableMetricsSnapshotLogs: toBoolean(process.env.ENABLE_METRICS_SNAPSHOT_LOGS, true)
 };

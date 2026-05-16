@@ -26,6 +26,8 @@ All of them run inside one Node process with:
 npm run start:render-free
 ```
 
+In the free profile, the API, Telegram bot, executor, and monitor run by default. The sniper worker is paused by default because it is the heaviest component and is the most likely to push a free Render instance over the `512Mi` memory limit.
+
 Migration should run in the Render build command, not in the start command. This helps the service pass Render health checks more reliably.
 
 ## What You Need
@@ -104,11 +106,18 @@ Add these in the Render dashboard:
 - `RPC_SLOT_LAG_THRESHOLD=15`
 - `RPC_HEALTH_CACHE_MS=5000`
 - `RPC_REQUEST_TIMEOUT_MS=10000`
+- `RPC_ENDPOINT_COOLDOWN_MS=30000`
+- `RPC_ERROR_LOG_COOLDOWN_MS=15000`
 - `TX_CONFIRMATION_TIMEOUT_MS=60000`
 - `WS_HEARTBEAT_MS=30000`
 - `WS_FREEZE_THRESHOLD_MS=90000`
 - `WS_RECONNECT_BASE_MS=2000`
 - `WS_RECONNECT_MAX_MS=15000`
+- `ENABLE_TELEGRAM_BOT=true`
+- `ENABLE_EXECUTOR_WORKER=true`
+- `ENABLE_MONITOR_WORKER=true`
+- `ENABLE_SNIPER_WORKER=false`
+- `ENABLE_METRICS_SNAPSHOT_LOGS=false`
 - `SNIPER_ENABLE_DEXSCREENER=true`
 - `SNIPER_WARMUP_MS=4000`
 - `SNIPER_MOMENTUM_WINDOW_MS=10000`
@@ -223,6 +232,7 @@ Check:
 
 - `TELEGRAM_BOT_TOKEN`
 - service logs for Telegram HTTP errors
+- if you see `telegram_http_409`, another machine is still polling the same bot token, or Telegram still has the token in webhook mode from an older deployment
 
 ### Admin Summary Fails
 

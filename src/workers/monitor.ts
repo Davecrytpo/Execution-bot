@@ -11,7 +11,9 @@ export async function startMonitorWorker(signal?: AbortSignal) {
       await evaluateOpenPositions();
       await processNextWithdrawal();
       await cleanupReplayGuards();
-      logger.info('metrics_snapshot', getMetricsSnapshot());
+      if (config.enableMetricsSnapshotLogs) {
+        logger.info('metrics_snapshot', getMetricsSnapshot());
+      }
     } catch (error: any) {
       if (signal?.aborted) {
         break;
