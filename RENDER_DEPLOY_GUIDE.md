@@ -2,6 +2,8 @@
 
 This guide deploys the bot stack on Render using the included `render.yaml` Blueprint and an external Neon Postgres database.
 
+If you need a free setup, do not use this guide. Use `RENDER_FREE_GUIDE.md` instead. This Blueprint expects paid Render services because it deploys separate background workers.
+
 ## What Gets Deployed
 
 - `solana-telegram-execution-api` as the public web service

@@ -41,6 +41,13 @@ Database note:
 - `npx neonctl@latest init database` is optional. If you already have a Neon connection string, the app can use it immediately.
 - `DATABASE_SSL` is only needed when your provider requires explicit SSL configuration outside the connection string.
 
+Free hosting note:
+
+- The cheapest practical hosted setup is `Neon` for the database plus a single `Render` free web service.
+- For that setup, use `npm run start:render-free` so migrations run first and then the API, Telegram bot, executor, monitor, and sniper run in one process.
+- Use UptimeRobot to ping `/health` every 5 minutes so Render does not idle-spin the service down.
+- Do not use `/robots.txt` for wakeups. Render serves that path directly while a free service is spun down.
+
 Realtime sniper flow:
 
 - Helius mainnet websocket is the primary launch detector
@@ -163,12 +170,15 @@ Operational docs:
 - `LEGAL_AND_RISK.md`
 - `ENV_VALIDATION_CHECKLIST.md`
 - `NEON_DATABASE_GUIDE.md`
+- `RENDER_FREE_GUIDE.md`
 - `RENDER_DEPLOY_GUIDE.md`
 - `render.yaml`
 
 Processes to run:
 
 - `npm run start:api`
+- `npm run start:allinone`
+- `npm run start:render-free`
 - `npm run start:bot`
 - `npm run start:worker`
 - `npm run start:monitor`

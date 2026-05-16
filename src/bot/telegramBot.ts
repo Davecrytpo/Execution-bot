@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import { PublicKey } from '@solana/web3.js';
 import { sendMessage, setCommands, getUpdates, type TelegramUpdate } from '../lib/telegram.js';
 import {
@@ -1032,25 +1033,34 @@ async function handleUpdate(update: TelegramUpdate) {
   }
 }
 
-async function main() {
+export async function startTelegramBot(signal?: AbortSignal) {
   await setCommands();
   let offset = 0;
 
-  while (true) {
+  while (!signal?.aborted) {
     try {
       const updates = await getUpdates(offset);
       for (const update of updates) {
+        if (signal?.aborted) {
+          break;
+        }
         offset = update.update_id + 1;
         await handleUpdate(update);
       }
     } catch (error: any) {
+      if (signal?.aborted) {
+        break;
+      }
       logger.error('telegram_poll_error', { message: error.message });
       await new Promise((resolve) => setTimeout(resolve, 3000));
     }
   }
 }
 
-main().catch((error) => {
-  logger.error('telegram_bot_fatal', { message: error.message });
-  process.exit(1);
-});
+const isDirectRun = process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1];
+if (isDirectRun) {
+  startTelegramBot().catch((error) => {
+    logger.error('telegram_bot_fatal', { message: error.message });
+    process.exit(1);
+  });
+}
