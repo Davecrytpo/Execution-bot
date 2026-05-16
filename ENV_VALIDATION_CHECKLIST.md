@@ -2,7 +2,6 @@
 
 ## Required
 - `DATABASE_URL`
-- `DATABASE_SSL` (`true` on Render Postgres)
 - `SOLANA_RPC`
 - `HELIUS_RPC_URL`
 - `HELIUS_WS_URL`
@@ -12,6 +11,7 @@
 - `JUPITER_API_KEY`
 
 ## Optional With Defaults
+- `DATABASE_SSL` (usually not needed for Neon when `sslmode=require` is in `DATABASE_URL`)
 - `PORT` (3100)
 - `HELIUS_GATEKEEPER_RPC_URL`
 - `ALCHEMY_RPC_URL`
@@ -58,5 +58,6 @@ The app now fails on startup when required env vars are missing or numeric setti
 - `npm run start:monitor`
 - `npm run start:sniper`
 
-## Render Note
-- For Render deployment, use the included `render.yaml` Blueprint and a Render Postgres database.
+## Neon Note
+- Neon works directly with the app using a standard Postgres connection string.
+- Keep `sslmode=require` in the Neon connection string.

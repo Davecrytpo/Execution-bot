@@ -12,7 +12,7 @@ function writeU64(buffer: Buffer, offset: number, value: bigint) {
 
 async function run() {
   const { encryptSecret, decryptSecret } = await import('../lib/crypto.js');
-  const { resolveDatabaseSsl } = await import('../lib/db.js');
+  const { normalizeDatabaseUrl, resolveDatabaseSsl } = await import('../lib/db.js');
   const { sanitizeForLog } = await import('../lib/logger.js');
   const { evaluateTurboGuardRow, validateSignalPayload } = await import('../services/executionService.js');
   const { isValidPositiveSolAmount } = await import('../bot/wizardLogic.js');
@@ -131,6 +131,14 @@ async function run() {
       databaseSsl: 'false'
     }),
     undefined
+  );
+  assert.equal(
+    normalizeDatabaseUrl('postgresql://user:pass@host/db?sslmode=require'),
+    'postgresql://user:pass@host/db'
+  );
+  assert.equal(
+    normalizeDatabaseUrl('postgresql://user:pass@host/db?sslmode=require&channel_binding=require'),
+    'postgresql://user:pass@host/db?channel_binding=require'
   );
 
   const curveBuffer = Buffer.alloc(64);

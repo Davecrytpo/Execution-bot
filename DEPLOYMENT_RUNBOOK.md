@@ -2,21 +2,19 @@
 
 ## Preflight
 - Verify `.env` values against `.env.example`.
-- Use Render Postgres for `DATABASE_URL`.
-- Set `DATABASE_SSL=true` for Render Postgres connections.
+- Prefer Neon for `DATABASE_URL` when you want a free managed Postgres database.
+- If your Neon connection string already includes `sslmode=require`, `DATABASE_SSL` is not required.
 - Ensure PostgreSQL reachable from app runtime.
 - Ensure Helius RPC, Helius WSS, and Alchemy backup RPC values are correct.
 - Ensure RPC endpoint is healthy and funded wallets can transact.
 - Ensure Telegram bot token is valid.
 - Ensure Jupiter API key is valid.
 
-## Render Recommendation
-- Prefer the included `render.yaml` Blueprint.
-- The Blueprint provisions one Render Postgres database plus:
-  - one web service for the API
-  - four background workers for bot, executor, monitor, and sniper
-- The API service runs `npm run migrate` as the pre-deploy command.
-- Keep all services and the database in the same Render region.
+## Database Recommendation
+- Prefer Neon as the managed Postgres provider.
+- Use the direct Neon connection string in `DATABASE_URL`.
+- Keep `sslmode=require` in the connection string.
+- If you later swap providers, the app still works with any standard Postgres connection string.
 
 ## Startup Order
 1. `npm run build`
@@ -62,9 +60,9 @@
 - Rotate `CUSTODY_MASTER_KEY` only with a formal re-encryption migration plan.
 - Rotate `TELEGRAM_BOT_TOKEN` in Telegram BotFather and update env.
 
-## Render Env Minimum
-- `DATABASE_URL` from the Render Postgres connection string
-- `DATABASE_SSL=true`
+## Minimum Env
+- `DATABASE_URL`
+- `DATABASE_SSL` only if your provider requires it outside the URL
 - `SOLANA_RPC`
 - `HELIUS_RPC_URL`
 - `HELIUS_WS_URL`

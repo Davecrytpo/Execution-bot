@@ -44,8 +44,19 @@ export function resolveDatabaseSsl(
   return undefined;
 }
 
+export function normalizeDatabaseUrl(databaseUrl: string) {
+  try {
+    const parsed = new URL(databaseUrl);
+    parsed.searchParams.delete('sslmode');
+    parsed.searchParams.delete('uselibpqcompat');
+    return parsed.toString();
+  } catch {
+    return databaseUrl;
+  }
+}
+
 export const pool = new Pool({
-  connectionString: config.databaseUrl,
+  connectionString: normalizeDatabaseUrl(config.databaseUrl),
   ssl: resolveDatabaseSsl(config.databaseUrl)
 });
 

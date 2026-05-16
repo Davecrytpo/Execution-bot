@@ -1,10 +1,9 @@
 # Render Deploy Guide
 
-This guide deploys the bot stack on Render using the included `render.yaml` Blueprint and a Render Postgres database.
+This guide deploys the bot stack on Render using the included `render.yaml` Blueprint and an external Neon Postgres database.
 
 ## What Gets Deployed
 
-- `solana-telegram-execution-db` as Render Postgres
 - `solana-telegram-execution-api` as the public web service
 - `solana-telegram-execution-bot` as the Telegram polling worker
 - `solana-telegram-execution-worker` as the execution queue worker
@@ -17,6 +16,7 @@ Make sure you already have:
 
 - A GitHub repo containing this project
 - A Render account connected to GitHub
+- A Neon database connection string
 - A valid Telegram bot token from BotFather
 - Helius RPC and WebSocket URLs
 - A Jupiter API key
@@ -24,7 +24,7 @@ Make sure you already have:
 
 Recommended:
 
-- Keep all Render services and the Render Postgres database in the same region
+- Keep the Neon database region close to your app region when possible
 - Use a long random `CUSTODY_MASTER_KEY` and store it securely
 - Fund at least one test wallet before live trading
 
@@ -44,12 +44,14 @@ You will be prompted to enter or manually add these values:
 
 Render will generate or provide:
 
-- `DATABASE_URL` from Render Postgres
 - `API_SHARED_SECRET` from the Blueprint
+
+You must provide:
+
+- `DATABASE_URL` from Neon
 
 Set by the Blueprint:
 
-- `DATABASE_SSL=true`
 - all default timing, sniper, and rate-limit settings
 
 ## Deployment Steps
@@ -65,7 +67,6 @@ Set by the Blueprint:
 
 Render will then:
 
-- create the Postgres database
 - build the Node services
 - run `npm run migrate` as the API pre-deploy command
 - start the API and all workers
@@ -162,7 +163,7 @@ Expected behavior:
 
 - Do not commit `.env` to GitHub.
 - Do not rotate `CUSTODY_MASTER_KEY` after wallets exist unless you are doing a planned re-encryption migration.
-- Keep `DATABASE_SSL=true` on Render Postgres.
+- Keep `sslmode=require` in the Neon `DATABASE_URL`.
 - If you later add new `sync: false` variables to `render.yaml`, Render will not automatically prompt for them on an existing Blueprint. Add them manually in the dashboard.
 
 ## If Deployment Fails
@@ -171,8 +172,7 @@ Expected behavior:
 
 Check:
 
-- the Render Postgres database exists
-- `DATABASE_URL` is attached from the Blueprint
+- `DATABASE_URL` is the Neon connection string
 - API pre-deploy logs for SQL errors
 
 ### API Fails Health Check

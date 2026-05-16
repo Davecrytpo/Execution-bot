@@ -34,12 +34,12 @@ Suggested handoff flow:
 4. Start the API, Telegram bot, execution worker, monitor worker, and sniper worker in separate terminals
 5. Point the existing degen-call bot to `POST /api/signals` if you still want external signals alongside on-chain sniper signals
 
-Render deployment note:
+Database note:
 
-- Use Render Postgres for `DATABASE_URL` instead of Supabase direct connections.
-- Set `DATABASE_SSL=true` when using Render Postgres.
-- A Render Blueprint is included in `render.yaml`.
-- The API service runs `npm run migrate` as its pre-deploy step.
+- Neon is the recommended free Postgres provider for this project.
+- A standard Neon connection string with `sslmode=require` works directly as `DATABASE_URL`.
+- `npx neonctl@latest init database` is optional. If you already have a Neon connection string, the app can use it immediately.
+- `DATABASE_SSL` is only needed when your provider requires explicit SSL configuration outside the connection string.
 
 Realtime sniper flow:
 
@@ -77,7 +77,7 @@ Buy sizing is taken from each Telegram user's settings. Users enable trading wit
 Primary infrastructure envs:
 
 - `DATABASE_URL`
-- `DATABASE_SSL`
+- `DATABASE_SSL` (optional)
 - `HELIUS_RPC_URL`
 - `HELIUS_WS_URL`
 - `HELIUS_GATEKEEPER_RPC_URL`
@@ -162,6 +162,7 @@ Operational docs:
 - `DEPLOYMENT_RUNBOOK.md`
 - `LEGAL_AND_RISK.md`
 - `ENV_VALIDATION_CHECKLIST.md`
+- `NEON_DATABASE_GUIDE.md`
 - `RENDER_DEPLOY_GUIDE.md`
 - `render.yaml`
 
