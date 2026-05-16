@@ -26,7 +26,7 @@ All of them run inside one Node process with:
 npm run start:render-free
 ```
 
-That script runs migrations first, then starts the all-in-one process.
+Migration should run in the Render build command, not in the start command. This helps the service pass Render health checks more reliably.
 
 ## What You Need
 
@@ -61,7 +61,7 @@ Recommended:
 8. Set `Build Command` to:
 
 ```text
-npm ci && npm run build
+npm ci && npm run build:render-free
 ```
 
 9. Set `Start Command` to:
@@ -205,7 +205,7 @@ Because of those limits, this setup is fine for testing and light personal use, 
 
 Check:
 
-- `Build Command` is `npm ci && npm run build`
+- `Build Command` is `npm ci && npm run build:render-free`
 - `Start Command` is `npm run start:render-free`
 - all required environment variables are present
 
@@ -215,7 +215,7 @@ Check:
 
 - the service is listening on Render's assigned `PORT`
 - `DATABASE_URL` is valid
-- the start command logs do not show migration failure
+- the build logs do not show migration failure
 
 ### Telegram Bot Does Not Respond
 

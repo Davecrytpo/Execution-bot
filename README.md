@@ -44,7 +44,7 @@ Database note:
 Free hosting note:
 
 - The cheapest practical hosted setup is `Neon` for the database plus a single `Render` free web service.
-- For that setup, use `npm run start:render-free` so migrations run first and then the API, Telegram bot, executor, monitor, and sniper run in one process.
+- For that setup, run migration in the Render build command and use `npm run start:render-free` only for process startup.
 - Use UptimeRobot to ping `/health` every 5 minutes so Render does not idle-spin the service down.
 - Do not use `/robots.txt` for wakeups. Render serves that path directly while a free service is spun down.
 
@@ -153,6 +153,7 @@ Processes to run:
 
 - `npm run start:api`
 - `npm run start:allinone`
+- `npm run build:render-free`
 - `npm run start:render-free`
 - `npm run start:bot`
 - `npm run start:worker`
