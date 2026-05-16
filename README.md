@@ -103,48 +103,23 @@ Latency note:
 
 Telegram commands:
 
+- Public commands are intentionally reduced to keep the bot clean for beginners:
 - `/start`
 - `/menu`
-- `/help`
 - `/wallet`
-- `/enable`
-- `/disable`
-- `/enableexit`
-- `/disableexit`
-- `/settings`
-- `/setsize 0.05`
-- `/setstake 0.05`
-- `/setdaily 0.25`
-- `/setminscore 55`
-- `/degenmode`
-- `/turboon`
-- `/turbooff`
-- `/turbostatus`
-- `/settp 75`
-- `/setsl 20`
-- `/setslippage 300`
-- `/setpriority 0.0001`
-- `/subscribe pumpfun,dexscreener`
-- `/trade TOKEN_MINT 0.05 300 75 20`
-- `/buy TOKEN_MINT 0.05 300 75 20`
-- `/positions`
-- `/copytrade`
+- `/trade`
 - `/status`
-- `/deposits`
-- `/withdraw DESTINATION 0.1`
-- `/confirmwithdraw CODE`
-- `/withdrawwizard`
-- `/withdrawals`
-- `/report`
-- `/whytrade`
-- `/exportkey CONFIRM`
+- `/help`
 - `/close`
+- Advanced slash commands still work for power users, but most actions now live inside the inline dashboard.
 
-Main menu keyboard:
+Dashboard navigation:
 
-- Bot now shows a professional two-column emoji button menu in Telegram.
-- Button clicks map to command handlers, so both keyboard taps and slash commands work.
-- Use `/menu` to reopen it and `/close` to hide it.
+- The bot now uses an inline multi-level dashboard instead of a crowded reply-keyboard command wall.
+- Users move through categories like `Wallet`, `Trading`, `Auto Buy`, `Auto Sell`, `Settings`, `Safety`, `Analytics`, and `Support`.
+- Navigation uses inline buttons, Back buttons, toggles, and message editing to keep the chat clean.
+- Guided prompts are used for input-heavy actions like manual trade entry and withdrawals.
+- Use `/menu` to reopen the dashboard and `/close` to hide it.
 
 How token selection works:
 

@@ -1,6 +1,38 @@
 import { config } from '../config.js';
 
-type TelegramMethod = 'getUpdates' | 'sendMessage' | 'setMyCommands';
+type TelegramMethod =
+  | 'getUpdates'
+  | 'sendMessage'
+  | 'editMessageText'
+  | 'answerCallbackQuery'
+  | 'setMyCommands';
+
+export type TelegramUser = {
+  id: number;
+  username?: string;
+  first_name?: string;
+  last_name?: string;
+};
+
+export type TelegramChat = {
+  id: number;
+};
+
+export type TelegramMessage = {
+  message_id: number;
+  text?: string;
+  chat: TelegramChat;
+  from?: TelegramUser;
+};
+
+export type InlineKeyboardButton = {
+  text: string;
+  callback_data: string;
+};
+
+type InlineKeyboardMarkup = {
+  inline_keyboard: InlineKeyboardButton[][];
+};
 
 type ReplyKeyboardMarkup = {
   keyboard: string[][];
@@ -13,21 +45,20 @@ type ReplyKeyboardRemove = {
   remove_keyboard: true;
 };
 
+type ReplyMarkup = InlineKeyboardMarkup | ReplyKeyboardMarkup | ReplyKeyboardRemove;
+
 type SendMessageOptions = {
-  replyMarkup?: ReplyKeyboardMarkup | ReplyKeyboardRemove;
+  replyMarkup?: ReplyMarkup;
 };
 
 export type TelegramUpdate = {
   update_id: number;
-  message?: {
-    text?: string;
-    chat: { id: number };
-    from?: {
-      id: number;
-      username?: string;
-      first_name?: string;
-      last_name?: string;
-    };
+  message?: TelegramMessage;
+  callback_query?: {
+    id: string;
+    data?: string;
+    from: TelegramUser;
+    message?: TelegramMessage;
   };
 };
 
@@ -58,12 +89,16 @@ export async function getUpdates(offset: number): Promise<TelegramUpdate[]> {
   return telegramRequest('getUpdates', {
     offset,
     timeout: 25,
-    allowed_updates: ['message']
+    allowed_updates: ['message', 'callback_query']
   });
 }
 
-export async function sendMessage(chatId: number | string, text: string, options?: SendMessageOptions): Promise<void> {
-  await telegramRequest('sendMessage', {
+export async function sendMessage(
+  chatId: number | string,
+  text: string,
+  options?: SendMessageOptions
+): Promise<TelegramMessage> {
+  return telegramRequest('sendMessage', {
     chat_id: chatId,
     text,
     parse_mode: 'Markdown',
@@ -71,47 +106,38 @@ export async function sendMessage(chatId: number | string, text: string, options
   });
 }
 
+export async function editMessageText(
+  chatId: number | string,
+  messageId: number,
+  text: string,
+  options?: SendMessageOptions
+): Promise<TelegramMessage> {
+  return telegramRequest('editMessageText', {
+    chat_id: chatId,
+    message_id: messageId,
+    text,
+    parse_mode: 'Markdown',
+    reply_markup: options?.replyMarkup
+  });
+}
+
+export async function answerCallbackQuery(callbackQueryId: string, text?: string): Promise<void> {
+  await telegramRequest('answerCallbackQuery', {
+    callback_query_id: callbackQueryId,
+    text
+  });
+}
+
 export async function setCommands(): Promise<void> {
   await telegramRequest('setMyCommands', {
     commands: [
-      { command: 'start', description: 'Create wallet and begin setup' },
-      { command: 'menu', description: 'Open the main menu keyboard' },
-      { command: 'help', description: 'Show setup and usage guide' },
-      { command: 'wallet', description: 'Show wallet and funding details' },
-      { command: 'enable', description: 'Enable auto-buy' },
-      { command: 'disable', description: 'Disable auto-buy' },
-      { command: 'enableexit', description: 'Enable auto-sell exits' },
-      { command: 'disableexit', description: 'Disable auto-sell exits' },
-      { command: 'settings', description: 'Show current settings' },
-      { command: 'setsize', description: 'Set buy size in SOL' },
-      { command: 'setstake', description: 'Set stake size in SOL' },
-      { command: 'setdaily', description: 'Set daily buy limit in SOL' },
-      { command: 'setminscore', description: 'Set minimum signal score' },
-      { command: 'degenmode', description: 'Apply fast-entry degen preset' },
-      { command: 'turboon', description: 'Enable turbo safety guards' },
-      { command: 'turbooff', description: 'Disable turbo safety guards' },
-      { command: 'turbostatus', description: 'Show turbo safety status' },
-      { command: 'settp', description: 'Set take profit percent' },
-      { command: 'setsl', description: 'Set stop loss percent' },
-      { command: 'setslippage', description: 'Set slippage in bps' },
-      { command: 'setpriority', description: 'Set priority fee in SOL' },
-      { command: 'subscribe', description: 'Set allowed signal sources' },
-      { command: 'sources', description: 'Show current signal source setup' },
-      { command: 'sniper', description: 'Show sniper source and filter status' },
-      { command: 'trade', description: 'Enter a manual trade' },
-      { command: 'buy', description: 'Alias for manual trade' },
-      { command: 'positions', description: 'Show open and closing positions' },
-      { command: 'copytrade', description: 'Copy-trade setup and status' },
-      { command: 'status', description: 'Show recent orders' },
-      { command: 'deposits', description: 'Show deposit history' },
-      { command: 'withdraw', description: 'Request withdrawal' },
-      { command: 'confirmwithdraw', description: 'Confirm pending withdrawal code' },
-      { command: 'withdrawwizard', description: 'Step-by-step withdrawal flow' },
-      { command: 'withdrawals', description: 'Show withdrawal requests' },
-      { command: 'report', description: 'Show account summary' },
-      { command: 'whytrade', description: 'Explain the latest trade decision' },
-      { command: 'exportkey', description: 'Reveal private key' },
-      { command: 'close', description: 'Hide the menu keyboard' }
+      { command: 'start', description: 'Open your trading dashboard' },
+      { command: 'menu', description: 'Open the main dashboard' },
+      { command: 'wallet', description: 'Open wallet overview' },
+      { command: 'trade', description: 'Start a manual trade flow' },
+      { command: 'status', description: 'Open analytics and recent activity' },
+      { command: 'help', description: 'Show onboarding and support help' },
+      { command: 'close', description: 'Hide the dashboard' }
     ]
   });
 }
