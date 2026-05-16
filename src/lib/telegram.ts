@@ -96,6 +96,8 @@ export async function setCommands(): Promise<void> {
       { command: 'setslippage', description: 'Set slippage in bps' },
       { command: 'setpriority', description: 'Set priority fee in SOL' },
       { command: 'subscribe', description: 'Set allowed signal sources' },
+      { command: 'sources', description: 'Show current signal source setup' },
+      { command: 'sniper', description: 'Show sniper source and filter status' },
       { command: 'trade', description: 'Enter a manual trade' },
       { command: 'buy', description: 'Alias for manual trade' },
       { command: 'positions', description: 'Show open and closing positions' },

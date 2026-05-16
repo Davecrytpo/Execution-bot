@@ -73,6 +73,36 @@ const MENU_TO_COMMAND: Record<string, string> = {
   '🗑 close': '/close'
 };
 
+const PROFESSIONAL_MAIN_MENU = [
+  ['💼 Positions', '🎯 Sniper'],
+  ['🤖 Copy Trade', '📡 Sources'],
+  ['🏦 Wallet', '⚙️ Settings'],
+  ['✅ Enable Auto-Buy', '🛑 Disable Auto-Buy'],
+  ['📥 Deposits', '💸 Withdraw'],
+  ['📤 Withdrawals', '📊 Report'],
+  ['🧠 Why This Trade', '🔄 Refresh'],
+  ['🧾 Help', '🗑 Close']
+];
+
+const PROFESSIONAL_MENU_TO_COMMAND: Record<string, string> = {
+  '💼 positions': '/positions',
+  '🎯 sniper': '/sniper',
+  '🤖 copy trade': '/copytrade',
+  '📡 sources': '/sources',
+  '🏦 wallet': '/wallet',
+  '⚙️ settings': '/settings',
+  '✅ enable auto-buy': '/enable',
+  '🛑 disable auto-buy': '/disable',
+  '📥 deposits': '/deposits',
+  '💸 withdraw': '/withdrawwizard',
+  '📤 withdrawals': '/withdrawals',
+  '📊 report': '/report',
+  '🧠 why this trade': '/whytrade',
+  '🔄 refresh': '/menu',
+  '🧾 help': '/help',
+  '🗑 close': '/close'
+};
+
 async function audit(identity: { walletContext: { userId: string }; chatId: number }, action: string, metadata?: Record<string, unknown>) {
   await logAuditAction({
     userId: identity.walletContext.userId,
@@ -96,7 +126,7 @@ async function showMainMenu(chatId: number | string) {
     ].join('\n'),
     {
       replyMarkup: {
-        keyboard: MAIN_MENU,
+        keyboard: PROFESSIONAL_MAIN_MENU,
         resize_keyboard: true,
         input_field_placeholder: 'Choose an action or type /help'
       }
@@ -131,7 +161,7 @@ function getCommandAndArgs(input: string): { command: string; args: string[] } {
     return { command: command.toLowerCase(), args };
   }
 
-  const commandFromMenu = MENU_TO_COMMAND[trimmed.toLowerCase()];
+  const commandFromMenu = PROFESSIONAL_MENU_TO_COMMAND[trimmed.toLowerCase()];
   if (commandFromMenu) {
     return { command: commandFromMenu, args: [] };
   }
@@ -561,6 +591,54 @@ async function handleCopyTrade(update: TelegramUpdate) {
   );
 }
 
+async function handleSources(update: TelegramUpdate) {
+  const identity = await getIdentity(update);
+  if (!identity) {
+    return;
+  }
+
+  const settings = await getUserSettings(identity.walletContext.userId);
+  const sources = Array.isArray(settings.allowed_sources) && settings.allowed_sources.length
+    ? settings.allowed_sources.join(', ')
+    : '*';
+
+  await sendMessage(
+    identity.chatId,
+    [
+      '*Signal Sources*',
+      `Current sources: \`${sources}\``,
+      'Use `/subscribe pumpfun,dexscreener` to allow only sniper-style feeds.',
+      'Use `/subscribe copytrade` to allow copy-trade signals.',
+      'Use `/subscribe *` to allow every supported source.'
+    ].join('\n')
+  );
+}
+
+async function handleSniper(update: TelegramUpdate) {
+  const identity = await getIdentity(update);
+  if (!identity) {
+    return;
+  }
+
+  const settings = await getUserSettings(identity.walletContext.userId);
+  const sources = Array.isArray(settings.allowed_sources) ? settings.allowed_sources : ['*'];
+  const pumpfunEnabled = sources.includes('*') || sources.includes('pumpfun');
+  const dexscreenerEnabled = sources.includes('*') || sources.includes('dexscreener');
+
+  await sendMessage(
+    identity.chatId,
+    [
+      '*Sniper Status*',
+      `Pump.fun source enabled: \`${String(pumpfunEnabled)}\``,
+      `DexScreener source enabled: \`${String(dexscreenerEnabled)}\``,
+      `Min score: \`${settings.min_score}\``,
+      `Max buy size: \`${settings.max_buy_sol} SOL\``,
+      `Auto-buy enabled: \`${String(settings.auto_buy_enabled)}\``,
+      'If you want only launch-sniper style signals, use `/subscribe pumpfun,dexscreener`.'
+    ].join('\n')
+  );
+}
+
 async function handleDeposits(update: TelegramUpdate) {
   const identity = await getIdentity(update);
   if (!identity) {
@@ -919,10 +997,10 @@ async function handleHelp(update: TelegramUpdate) {
       '3) Configure risk: `/setsize`, `/setdaily`, `/setminscore`, `/setsl`, `/settp`, `/setslippage`, `/setpriority`.',
       `Fast preset in one step: \`/degenmode\` (${DEGEN_MIN_SCORE} score, ${DEGEN_SLIPPAGE_BPS} bps, ${DEGEN_PRIORITY_SOL} SOL priority, ${DEGEN_DAILY_LIMIT_SOL} SOL daily cap).`,
       'Turbo guards: `/turboon` `/turbooff` `/turbostatus`.',
-      '4) Select sources with `/subscribe pumpfun,dexscreener`.',
+      '4) Select sources with `/subscribe pumpfun,dexscreener` or review them with `/sources`.',
       '5) Enable automation with `/enable` and optional `/enableexit`.',
       '6) Manual order anytime: `/trade TOKEN_MINT 0.05 300 75 20`.',
-      '7) Track positions and execution with `/positions`, `/status`, `/report`, `/whytrade`.',
+      '7) Track positions and execution with `/positions`, `/status`, `/report`, `/whytrade`, `/sniper`.',
       '',
       '*Risk Pass Means*',
       `- Amount must be >= \`${MIN_BUY_SOL} SOL\``,
@@ -934,8 +1012,8 @@ async function handleHelp(update: TelegramUpdate) {
       '',
       '*Core Commands*',
       '`/menu` `/help` `/wallet` `/settings` `/enable` `/disable` `/enableexit` `/disableexit`',
-      '`/setsize` `/setdaily` `/setminscore` `/degenmode` `/turboon` `/turbooff` `/turbostatus` `/settp` `/setsl` `/setslippage` `/setpriority` `/subscribe`',
-      '`/trade` `/buy` `/positions` `/copytrade` `/status` `/deposits` `/withdraw` `/confirmwithdraw CODE` `/withdrawwizard` `/withdrawals` `/report` `/whytrade` `/exportkey CONFIRM`'
+      '`/setsize` `/setdaily` `/setminscore` `/degenmode` `/turboon` `/turbooff` `/turbostatus` `/settp` `/setsl` `/setslippage` `/setpriority` `/subscribe` `/sources`',
+      '`/trade` `/buy` `/positions` `/sniper` `/copytrade` `/status` `/deposits` `/withdraw` `/confirmwithdraw CODE` `/withdrawwizard` `/withdrawals` `/report` `/whytrade` `/exportkey CONFIRM`'
     ].join('\n')
   );
 }
@@ -1000,11 +1078,15 @@ async function handleUpdate(update: TelegramUpdate) {
       return handleSetPriority(update, args);
     case '/subscribe':
       return handleSubscribe(update, args);
+    case '/sources':
+      return handleSources(update);
     case '/trade':
     case '/buy':
       return handleTrade(update, args);
     case '/positions':
       return handlePositions(update);
+    case '/sniper':
+      return handleSniper(update);
     case '/copytrade':
       return handleCopyTrade(update);
     case '/status':
