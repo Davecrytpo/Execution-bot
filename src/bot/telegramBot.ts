@@ -9,6 +9,7 @@ import {
   getUpdates,
   sendMessage,
   sendPhoto,
+  setWebhook,
   setCommands,
   type InlineKeyboardButton,
   type TelegramUpdate
@@ -407,11 +408,11 @@ function navRows(view: DashboardView): InlineKeyboardButton[][] {
   const rows: InlineKeyboardButton[][] = [];
 
   if (parent) {
-    rows.push([button('Back', `view:${parent}`), button('Home', 'view:home')]);
+    rows.push([button('◀️ Back', `view:${parent}`), button('🏠 Home', 'view:home')]);
   } else if (view !== 'home') {
-    rows.push([button('Home', 'view:home')]);
+    rows.push([button('🏠 Home', 'view:home')]);
   } else {
-    rows.push([button('Refresh', 'view:home')]);
+    rows.push([button('🔄 Refresh', 'view:home')]);
   }
 
   return rows;
@@ -481,10 +482,10 @@ async function renderHomeView(identity: BotIdentity, notice?: string, prompt?: s
   return {
     text: composeDashboardText('Home', body, notice, prompt),
     buttons: [
-      [button('Wallet', 'view:wallet'), button('Trading', 'view:trading')],
-      [button('Auto Buy', 'view:auto_buy'), button('Auto Sell', 'view:auto_sell')],
-      [button('Settings', 'view:settings'), button('Safety', 'view:safety')],
-      [button('Analytics', 'view:analytics'), button('Support', 'view:support')],
+      [button('👛 Wallet', 'view:wallet'), button('📈 Trading', 'view:trading')],
+      [button('🤖 Auto Buy', 'view:auto_buy'), button('🎯 Auto Sell', 'view:auto_sell')],
+      [button('⚙️ Settings', 'view:settings'), button('🛡️ Safety', 'view:safety')],
+      [button('📊 Analytics', 'view:analytics'), button('🆘 Support', 'view:support')],
       ...navRows('home')
     ]
   };
@@ -509,9 +510,9 @@ async function renderWalletView(identity: BotIdentity, notice?: string, prompt?:
   return {
     text: composeDashboardText('Wallet', body, notice, prompt),
     buttons: [
-      [button('Refresh Balance', 'act:wallet_refresh'), button('Deposits', 'view:wallet_deposits')],
-      [button('Withdraw', 'prompt:withdraw'), button('Withdrawal History', 'view:wallet_withdrawals')],
-      [button('Private Key Export', 'view:wallet_export_confirm')],
+      [button('🔄 Refresh Balance', 'act:wallet_refresh'), button('📥 Deposits', 'view:wallet_deposits')],
+      [button('💸 Withdraw', 'prompt:withdraw'), button('📜 Withdrawal History', 'view:wallet_withdrawals')],
+      [button('🔐 Private Key Export', 'view:wallet_export_confirm')],
       ...navRows('wallet')
     ]
   };
@@ -526,7 +527,7 @@ async function renderWalletDepositsView(identity: BotIdentity, notice?: string, 
   return {
     text: composeDashboardText('Deposit History', ['*Recent deposits*', ...lines], notice, prompt),
     buttons: [
-      [button('Refresh', 'view:wallet_deposits')],
+      [button('🔄 Refresh', 'view:wallet_deposits')],
       ...navRows('wallet_deposits')
     ]
   };
@@ -545,7 +546,7 @@ async function renderWalletWithdrawalsView(identity: BotIdentity, notice?: strin
   return {
     text: composeDashboardText('Withdrawal History', ['*Recent withdrawals*', ...lines], notice, prompt),
     buttons: [
-      [button('New Withdrawal', 'prompt:withdraw')],
+      [button('➕ New Withdrawal', 'prompt:withdraw')],
       ...navRows('wallet_withdrawals')
     ]
   };
@@ -570,8 +571,8 @@ function renderWalletWithdrawConfirmView(identity: BotIdentity, notice?: string,
     text: composeDashboardText('Withdrawal Confirmation', body, notice, prompt),
     buttons: pending
       ? [
-        [button('Confirm Withdrawal', 'act:withdraw_confirm')],
-        [button('Cancel', 'act:withdraw_cancel')],
+        [button('✅ Confirm Withdrawal', 'act:withdraw_confirm')],
+        [button('✖️ Cancel', 'act:withdraw_cancel')],
         ...navRows('wallet_withdraw_confirm')
       ]
       : navRows('wallet_withdraw_confirm')
@@ -588,7 +589,7 @@ function renderWalletExportConfirmView(notice?: string, prompt?: string): Dashbo
   return {
     text: composeDashboardText('Private Key Export', body, notice, prompt),
     buttons: [
-      [button('Reveal Private Key', 'act:export_confirm')],
+      [button('🚨 Reveal Private Key', 'act:export_confirm')],
       ...navRows('wallet_export_confirm')
     ]
   };
@@ -608,9 +609,9 @@ async function renderTradingView(identity: BotIdentity, notice?: string, prompt?
   return {
     text: composeDashboardText('Trading', body, notice, prompt),
     buttons: [
-      [button('New Trade', 'prompt:trade'), button('Positions', 'view:analytics_positions')],
-      [button('Recent Orders', 'view:analytics_orders'), button('Sources', 'view:sources')],
-      [button('Sniper Status', 'view:sniper')],
+      [button('🛒 New Trade', 'prompt:trade'), button('📦 Positions', 'view:analytics_positions')],
+      [button('🧾 Recent Orders', 'view:analytics_orders'), button('📡 Sources', 'view:sources')],
+      [button('🎯 Sniper Status', 'view:sniper')],
       ...navRows('trading')
     ]
   };
@@ -630,10 +631,10 @@ async function renderAutoBuyView(identity: BotIdentity, notice?: string, prompt?
   return {
     text: composeDashboardText('Auto Buy', body, notice, prompt),
     buttons: [
-      [button(settings.auto_buy_enabled ? 'Turn Auto Buy OFF' : 'Turn Auto Buy ON', 'act:toggle_auto_buy')],
-      [button('Set Buy Size', 'prompt:set_max_buy'), button('Set Daily Limit', 'prompt:set_daily_limit')],
-      [button('Set Min Score', 'prompt:set_min_score'), button('Sources', 'view:sources')],
-      [button('Apply Degen Preset', 'act:degen_preset')],
+      [button(settings.auto_buy_enabled ? '🛑 Turn Auto Buy OFF' : '✅ Turn Auto Buy ON', 'act:toggle_auto_buy')],
+      [button('💰 Set Buy Size', 'prompt:set_max_buy'), button('📅 Set Daily Limit', 'prompt:set_daily_limit')],
+      [button('⭐ Set Min Score', 'prompt:set_min_score'), button('📡 Sources', 'view:sources')],
+      [button('🔥 Apply Degen Preset', 'act:degen_preset')],
       ...navRows('auto_buy')
     ]
   };
@@ -653,8 +654,8 @@ async function renderAutoSellView(identity: BotIdentity, notice?: string, prompt
   return {
     text: composeDashboardText('Auto Sell', body, notice, prompt),
     buttons: [
-      [button(settings.auto_sell_enabled ? 'Turn Auto Sell OFF' : 'Turn Auto Sell ON', 'act:toggle_auto_sell')],
-      [button('Set Take Profit', 'prompt:set_take_profit'), button('Set Stop Loss', 'prompt:set_stop_loss')],
+      [button(settings.auto_sell_enabled ? '🛑 Turn Auto Sell OFF' : '✅ Turn Auto Sell ON', 'act:toggle_auto_sell')],
+      [button('🏁 Set Take Profit', 'prompt:set_take_profit'), button('🧯 Set Stop Loss', 'prompt:set_stop_loss')],
       ...navRows('auto_sell')
     ]
   };
@@ -673,7 +674,7 @@ async function renderSettingsView(identity: BotIdentity, notice?: string, prompt
   return {
     text: composeDashboardText('Settings', body, notice, prompt),
     buttons: [
-      [button('Set Slippage', 'prompt:set_slippage'), button('Set Priority Fee', 'prompt:set_priority')],
+      [button('🌊 Set Slippage', 'prompt:set_slippage'), button('⚡ Set Priority Fee', 'prompt:set_priority')],
       ...navRows('settings')
     ]
   };
@@ -694,8 +695,8 @@ async function renderSafetyView(identity: BotIdentity, notice?: string, prompt?:
   return {
     text: composeDashboardText('Safety', body, notice, prompt),
     buttons: [
-      [button(settings.degen_turbo_enabled ? 'Turn Turbo Guard OFF' : 'Turn Turbo Guard ON', 'act:toggle_turbo')],
-      [button('Withdraw', 'prompt:withdraw'), button('Private Key Export', 'view:wallet_export_confirm')],
+      [button(settings.degen_turbo_enabled ? '🛑 Turn Turbo Guard OFF' : '✅ Turn Turbo Guard ON', 'act:toggle_turbo')],
+      [button('💸 Withdraw', 'prompt:withdraw'), button('🔐 Private Key Export', 'view:wallet_export_confirm')],
       ...navRows('safety')
     ]
   };
@@ -718,8 +719,8 @@ async function renderAnalyticsView(identity: BotIdentity, notice?: string, promp
   return {
     text: composeDashboardText('Analytics', body, notice, prompt),
     buttons: [
-      [button('Positions', 'view:analytics_positions'), button('Recent Orders', 'view:analytics_orders')],
-      [button('Account Report', 'view:analytics_report'), button('Why Last Trade', 'view:analytics_decision')],
+      [button('📦 Positions', 'view:analytics_positions'), button('🧾 Recent Orders', 'view:analytics_orders')],
+      [button('📈 Account Report', 'view:analytics_report'), button('🧠 Why Last Trade', 'view:analytics_decision')],
       ...navRows('analytics')
     ]
   };
@@ -736,7 +737,7 @@ async function renderPositionsView(identity: BotIdentity, notice?: string, promp
   return {
     text: composeDashboardText('Open Positions', ['*Position summary*', ...lines], notice, prompt),
     buttons: [
-      [button('Refresh', 'view:analytics_positions')],
+      [button('🔄 Refresh', 'view:analytics_positions')],
       ...navRows('analytics_positions')
     ]
   };
@@ -753,7 +754,7 @@ async function renderOrdersView(identity: BotIdentity, notice?: string, prompt?:
   return {
     text: composeDashboardText('Recent Orders', ['*Execution history*', ...lines], notice, prompt),
     buttons: [
-      [button('Refresh', 'view:analytics_orders')],
+      [button('🔄 Refresh', 'view:analytics_orders')],
       ...navRows('analytics_orders')
     ]
   };
@@ -812,14 +813,16 @@ async function renderSourcesView(identity: BotIdentity, notice?: string, prompt?
     '*Signal Sources*',
     `Current mode: \`${sourceModeLabel(settings.allowed_sources)}\``,
     '',
-    'Choose the source profile that matches how you want the bot to trade.'
+    config.enableSniperWorker
+      ? 'Choose the source profile that matches how you want the bot to trade.'
+      : 'Sniper monitoring is paused on this deployment profile. Copy-trade and manual trading remain available.'
   ];
 
   return {
     text: composeDashboardText('Source Routing', body, notice, prompt),
     buttons: [
-      [button('Launch Sniper', 'act:source_sniper'), button('Copy Trade Only', 'act:source_copy')],
-      [button('Hybrid', 'act:source_hybrid'), button('All Sources', 'act:source_all')],
+      [button('🎯 Launch Sniper', 'act:source_sniper'), button('🪞 Copy Trade Only', 'act:source_copy')],
+      [button('🔀 Hybrid', 'act:source_hybrid'), button('🌐 All Sources', 'act:source_all')],
       ...navRows('sources')
     ]
   };
@@ -847,7 +850,7 @@ async function renderSniperView(identity: BotIdentity, notice?: string, prompt?:
   return {
     text: composeDashboardText('Launch Sniper', body, notice, prompt),
     buttons: [
-      [button('Open Sources', 'view:sources'), button('Open Auto Buy', 'view:auto_buy')],
+      [button('📡 Open Sources', 'view:sources'), button('🤖 Open Auto Buy', 'view:auto_buy')],
       ...navRows('sniper')
     ]
   };
@@ -866,8 +869,8 @@ function renderSupportView(notice?: string, prompt?: string): DashboardRender {
   return {
     text: composeDashboardText('Support', body, notice, prompt),
     buttons: [
-      [button('Open Wallet', 'view:wallet'), button('Open Trading', 'view:trading')],
-      [button('Open Settings', 'view:settings'), button('Open Analytics', 'view:analytics')],
+      [button('👛 Open Wallet', 'view:wallet'), button('📈 Open Trading', 'view:trading')],
+      [button('⚙️ Open Settings', 'view:settings'), button('📊 Open Analytics', 'view:analytics')],
       ...navRows('support')
     ]
   };
@@ -1161,8 +1164,9 @@ async function handleCallbackQuery(update: TelegramUpdate) {
     session.messageId = preferredMessageId;
   }
 
-  try {
-    switch (callback.data) {
+  await answerCallbackQuery(callback.id).catch(() => undefined);
+
+  switch (callback.data) {
       case 'view:home':
         await showDashboard(identity, 'home', undefined, preferredMessageId);
         return;
@@ -1307,15 +1311,42 @@ async function handleCallbackQuery(update: TelegramUpdate) {
         await showDashboard(identity, 'auto_buy', 'Degen preset applied successfully.', preferredMessageId);
         return;
       case 'act:source_sniper':
+        if (!config.enableSniperWorker) {
+          await showDashboard(
+            identity,
+            'sources',
+            'Launch Sniper is paused on this deployment profile. Use Copy Trade, or move to a stronger hosting profile.',
+            preferredMessageId
+          );
+          return;
+        }
         await updateSourceMode(identity, ['pumpfun', 'dexscreener'], 'Signal mode set to Launch Sniper.', preferredMessageId);
         return;
       case 'act:source_copy':
         await updateSourceMode(identity, ['copytrade'], 'Signal mode set to Copy Trade only.', preferredMessageId);
         return;
       case 'act:source_hybrid':
+        if (!config.enableSniperWorker) {
+          await showDashboard(
+            identity,
+            'sources',
+            'Hybrid depends on sniper feeds. On this deployment the sniper side is paused, so Hybrid is not available.',
+            preferredMessageId
+          );
+          return;
+        }
         await updateSourceMode(identity, ['pumpfun', 'dexscreener', 'copytrade'], 'Signal mode set to Hybrid.', preferredMessageId);
         return;
       case 'act:source_all':
+        if (!config.enableSniperWorker) {
+          await showDashboard(
+            identity,
+            'sources',
+            'All Sources includes sniper feeds. Those feeds are paused on this deployment profile.',
+            preferredMessageId
+          );
+          return;
+        }
         await updateSourceMode(identity, ['*'], 'Signal mode set to All Sources.', preferredMessageId);
         return;
       case 'act:withdraw_confirm':
@@ -1342,9 +1373,6 @@ async function handleCallbackQuery(update: TelegramUpdate) {
       default:
         await showDashboard(identity, 'home', 'That action is not available yet.', preferredMessageId);
         return;
-    }
-  } finally {
-    await answerCallbackQuery(callback.id).catch(() => undefined);
   }
 }
 
@@ -1654,7 +1682,7 @@ async function handleExportKeyCommand(identity: BotIdentity) {
   return showDashboard(identity, 'wallet', 'Private key sent in a separate message.');
 }
 
-async function handleIncomingUpdate(update: TelegramUpdate) {
+export async function handleIncomingUpdate(update: TelegramUpdate) {
   if (isCallbackUpdate(update)) {
     return handleCallbackQuery(update);
   }
@@ -1681,10 +1709,20 @@ async function handleIncomingUpdate(update: TelegramUpdate) {
 }
 
 export async function startTelegramBot(signal?: AbortSignal) {
+  await setCommands();
+  if (config.telegramWebhookUrl) {
+    await setWebhook(config.telegramWebhookUrl, config.telegramWebhookSecret || undefined);
+    logger.info('telegram_webhook_enabled', { url: config.telegramWebhookUrl });
+
+    while (!signal?.aborted) {
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
+    return;
+  }
+
   await deleteWebhook(false).catch((error: any) => {
     logger.error('telegram_delete_webhook_failed', { message: error.message });
   });
-  await setCommands();
   let offset = 0;
 
   while (!signal?.aborted) {

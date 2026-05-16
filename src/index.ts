@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { config } from './config.js';
 import { adminRouter } from './routes/admin.js';
 import { signalsRouter } from './routes/signals.js';
+import { telegramRouter } from './routes/telegram.js';
 
 export function createApp() {
   const app = express();
@@ -14,6 +15,7 @@ export function createApp() {
 
   app.use('/api/signals', signalsRouter);
   app.use('/api/admin', adminRouter);
+  app.use('/api/telegram', telegramRouter);
 
   return app;
 }

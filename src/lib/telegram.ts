@@ -8,7 +8,8 @@ type TelegramMethod =
   | 'editMessageText'
   | 'answerCallbackQuery'
   | 'setMyCommands'
-  | 'deleteWebhook';
+  | 'deleteWebhook'
+  | 'setWebhook';
 
 export type TelegramUser = {
   id: number;
@@ -192,5 +193,13 @@ export async function setCommands(): Promise<void> {
 export async function deleteWebhook(dropPendingUpdates = false): Promise<void> {
   await telegramRequest('deleteWebhook', {
     drop_pending_updates: dropPendingUpdates
+  });
+}
+
+export async function setWebhook(url: string, secretToken?: string): Promise<void> {
+  await telegramRequest('setWebhook', {
+    url,
+    allowed_updates: ['message', 'callback_query'],
+    ...(secretToken ? { secret_token: secretToken } : {})
   });
 }

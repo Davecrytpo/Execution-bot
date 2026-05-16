@@ -51,6 +51,20 @@ function deriveAlchemyWsUrl(rpcUrl: string) {
   return '';
 }
 
+function deriveTelegramWebhookUrl() {
+  const explicit = optional(process.env.TELEGRAM_WEBHOOK_URL);
+  if (explicit) {
+    return explicit;
+  }
+
+  const renderExternalUrl = optional(process.env.RENDER_EXTERNAL_URL);
+  if (renderExternalUrl) {
+    return `${renderExternalUrl}/api/telegram/webhook`;
+  }
+
+  return '';
+}
+
 export const config = {
   port: toNumber(process.env.PORT, 3100, 1),
   databaseUrl: required('DATABASE_URL', process.env.DATABASE_URL),
@@ -101,5 +115,7 @@ export const config = {
   enableExecutorWorker: toBoolean(process.env.ENABLE_EXECUTOR_WORKER, true),
   enableMonitorWorker: toBoolean(process.env.ENABLE_MONITOR_WORKER, true),
   enableSniperWorker: toBoolean(process.env.ENABLE_SNIPER_WORKER, true),
-  enableMetricsSnapshotLogs: toBoolean(process.env.ENABLE_METRICS_SNAPSHOT_LOGS, true)
+  enableMetricsSnapshotLogs: toBoolean(process.env.ENABLE_METRICS_SNAPSHOT_LOGS, true),
+  telegramWebhookUrl: deriveTelegramWebhookUrl(),
+  telegramWebhookSecret: optional(process.env.TELEGRAM_WEBHOOK_SECRET) || optional(process.env.API_SHARED_SECRET)
 };

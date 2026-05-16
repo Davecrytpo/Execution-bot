@@ -27,6 +27,7 @@ npm run start:render-free
 ```
 
 In the free profile, the API, Telegram bot, executor, and monitor run by default. The sniper worker is paused by default because it is the heaviest component and is the most likely to push a free Render instance over the `512Mi` memory limit.
+On Render, Telegram delivery now switches to webhook mode automatically by using Render's `RENDER_EXTERNAL_URL`.
 
 Migration should run in the Render build command, not in the start command. This helps the service pass Render health checks more reliably.
 
@@ -118,6 +119,8 @@ Add these in the Render dashboard:
 - `ENABLE_MONITOR_WORKER=true`
 - `ENABLE_SNIPER_WORKER=false`
 - `ENABLE_METRICS_SNAPSHOT_LOGS=false`
+- `TELEGRAM_WEBHOOK_URL=` optional, usually leave empty on Render
+- `TELEGRAM_WEBHOOK_SECRET=` optional, otherwise the bot reuses `API_SHARED_SECRET`
 - `SNIPER_ENABLE_DEXSCREENER=true`
 - `SNIPER_WARMUP_MS=4000`
 - `SNIPER_MOMENTUM_WINDOW_MS=10000`
@@ -193,9 +196,9 @@ Expected:
 4. Watch the Render logs and confirm:
 
 - API started
-- Telegram polling started
+- Telegram delivery started
 - monitor loop is logging metrics
-- sniper connected without crashing
+- no repeated out-of-memory restarts
 
 ## Limits You Need To Accept
 
@@ -231,8 +234,9 @@ Check:
 Check:
 
 - `TELEGRAM_BOT_TOKEN`
-- service logs for Telegram HTTP errors
+- service logs for Telegram HTTP or webhook errors
 - if you see `telegram_http_409`, another machine is still polling the same bot token, or Telegram still has the token in webhook mode from an older deployment
+- if you are on Render, confirm `/api/telegram/webhook` is reachable and `/health` is healthy
 
 ### Admin Summary Fails
 
