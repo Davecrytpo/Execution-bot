@@ -220,20 +220,32 @@ async function hydrateDashboardSession(chatId: number) {
     return getDashboardSession(chatId);
   }
 
-  const result = await query<{
-    message_id: string | null;
-    view: string | null;
-    pending_input: unknown;
-  }>(
-    `
-    SELECT message_id::text, view, pending_input
-    FROM telegram_dashboard_sessions
-    WHERE chat_id = $1
-    `,
-    [chatId]
-  );
+  let row:
+    | {
+      message_id: string | null;
+      view: string | null;
+      pending_input: unknown;
+    }
+    | undefined;
 
-  const row = result.rows[0];
+  try {
+    const result = await query<{
+      message_id: string | null;
+      view: string | null;
+      pending_input: unknown;
+    }>(
+      `
+      SELECT message_id::text, view, pending_input
+      FROM telegram_dashboard_sessions
+      WHERE chat_id = $1
+      `,
+      [chatId]
+    );
+    row = result.rows[0];
+  } catch (error: any) {
+    logger.error('telegram_dashboard_session_load_failed', { chatId, message: error.message });
+  }
+
   const session: DashboardSession = {
     messageId: row?.message_id ? Number(row.message_id) : undefined,
     view: isDashboardView(row?.view) ? row.view : 'home',
@@ -245,23 +257,27 @@ async function hydrateDashboardSession(chatId: number) {
 
 async function persistDashboardSession(chatId: number) {
   const session = getDashboardSession(chatId);
-  await query(
-    `
-    INSERT INTO telegram_dashboard_sessions (chat_id, message_id, view, pending_input)
-    VALUES ($1, $2, $3, $4)
-    ON CONFLICT (chat_id) DO UPDATE
-    SET message_id = EXCLUDED.message_id,
-        view = EXCLUDED.view,
-        pending_input = EXCLUDED.pending_input,
-        updated_at = NOW()
-    `,
-    [
-      chatId,
-      session.messageId ?? null,
-      session.view,
-      session.pendingInput ?? null
-    ]
-  );
+  try {
+    await query(
+      `
+      INSERT INTO telegram_dashboard_sessions (chat_id, message_id, view, pending_input)
+      VALUES ($1, $2, $3, $4)
+      ON CONFLICT (chat_id) DO UPDATE
+      SET message_id = EXCLUDED.message_id,
+          view = EXCLUDED.view,
+          pending_input = EXCLUDED.pending_input,
+          updated_at = NOW()
+      `,
+      [
+        chatId,
+        session.messageId ?? null,
+        session.view,
+        session.pendingInput ?? null
+      ]
+    );
+  } catch (error: any) {
+    logger.error('telegram_dashboard_session_persist_failed', { chatId, message: error.message });
+  }
 }
 
 function newWithdrawCode() {
