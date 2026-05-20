@@ -6,6 +6,7 @@ type TelegramMethod =
   | 'sendMessage'
   | 'sendPhoto'
   | 'editMessageText'
+  | 'deleteMessage'
   | 'answerCallbackQuery'
   | 'setMyCommands'
   | 'deleteWebhook'
@@ -167,6 +168,16 @@ export async function editMessageText(
     text,
     parse_mode: 'Markdown',
     reply_markup: options?.replyMarkup
+  });
+}
+
+export async function deleteMessage(
+  chatId: number | string,
+  messageId: number
+): Promise<boolean> {
+  return telegramRequest('deleteMessage', {
+    chat_id: chatId,
+    message_id: messageId
   });
 }
 

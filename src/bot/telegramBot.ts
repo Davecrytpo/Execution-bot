@@ -4,6 +4,7 @@ import { PublicKey } from '@solana/web3.js';
 import { config } from '../config.js';
 import {
   answerCallbackQuery,
+  deleteMessage,
   deleteWebhook,
   editMessageText,
   getUpdates,
@@ -403,6 +404,32 @@ function getCallbackMessageId(update: TelegramUpdate) {
 
 function getUpdateChatId(update: TelegramUpdate) {
   return update.message?.chat.id ?? update.callback_query?.message?.chat.id ?? null;
+}
+
+async function maybeDeleteIncomingMessage(update: TelegramUpdate) {
+  const messageId = update.message?.message_id;
+  const chatId = update.message?.chat.id;
+  if (!messageId || !chatId) {
+    return;
+  }
+
+  try {
+    await deleteMessage(chatId, messageId);
+  } catch (error: any) {
+    const message = String(error.message ?? '');
+    if (
+      message.includes('message to delete not found')
+      || message.includes('message can')
+      || message.includes('message identifier is not specified')
+    ) {
+      return;
+    }
+    logger.error('telegram_message_delete_failed', {
+      chatId,
+      messageId,
+      message
+    });
+  }
 }
 
 async function getIdentity(update: TelegramUpdate): Promise<BotIdentity | null> {
@@ -1851,17 +1878,20 @@ export async function handleIncomingUpdate(update: TelegramUpdate) {
   if (!rawText.startsWith('/')) {
     const handledPending = await processPendingInput(update, rawText);
     if (handledPending) {
+      await maybeDeleteIncomingMessage(update);
       return;
     }
 
     const identity = await getIdentity(update);
     if (identity) {
       await showDashboard(identity, 'home', 'Use the dashboard buttons below to continue.');
+      await maybeDeleteIncomingMessage(update);
     }
     return;
   }
 
-  return handleCommand(update);
+  await handleCommand(update);
+  await maybeDeleteIncomingMessage(update);
 }
 
 export async function startTelegramBot(signal?: AbortSignal) {
