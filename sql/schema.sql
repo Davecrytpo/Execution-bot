@@ -145,6 +145,14 @@ CREATE TABLE IF NOT EXISTS manual_trade_idempotency (
     PRIMARY KEY (user_id, idempotency_key)
 );
 
+CREATE TABLE IF NOT EXISTS telegram_dashboard_sessions (
+    chat_id BIGINT PRIMARY KEY,
+    message_id BIGINT,
+    view TEXT NOT NULL DEFAULT 'home',
+    pending_input JSONB,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE INDEX IF NOT EXISTS idx_telegram_users_enabled ON telegram_users(auto_buy_enabled);
 CREATE INDEX IF NOT EXISTS idx_custody_wallets_user_id ON custody_wallets(user_id);
 CREATE INDEX IF NOT EXISTS idx_execution_signals_source ON execution_signals(source);

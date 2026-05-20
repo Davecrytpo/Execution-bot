@@ -31,6 +31,7 @@ import {
 import { enqueueManualTradeForUser } from '../services/executionService.js';
 import { logger } from '../lib/logger.js';
 import { logAuditAction } from '../lib/audit.js';
+import { query } from '../lib/db.js';
 import { isValidPositiveSolAmount } from './wizardLogic.js';
 import {
   deriveAutoBuyExecutionState,
@@ -117,6 +118,29 @@ type DashboardRender = {
   buttons: InlineKeyboardButton[][];
 };
 
+const DASHBOARD_VIEWS: DashboardView[] = [
+  'home',
+  'wallet',
+  'wallet_deposits',
+  'wallet_withdrawals',
+  'wallet_withdraw_confirm',
+  'wallet_export_confirm',
+  'trading',
+  'auto_buy',
+  'auto_sell',
+  'settings',
+  'safety',
+  'analytics',
+  'analytics_positions',
+  'analytics_orders',
+  'analytics_report',
+  'analytics_decision',
+  'sources',
+  'sniper',
+  'support'
+];
+const DASHBOARD_VIEW_SET = new Set<DashboardView>(DASHBOARD_VIEWS);
+
 const VIEW_PARENT: Partial<Record<DashboardView, DashboardView>> = {
   wallet: 'home',
   wallet_deposits: 'wallet',
@@ -155,6 +179,89 @@ function getDashboardSession(chatId: number): DashboardSession {
   const created: DashboardSession = { view: 'home' };
   dashboardSessionByChat.set(chatId, created);
   return created;
+}
+
+function isDashboardView(value: unknown): value is DashboardView {
+  return typeof value === 'string' && DASHBOARD_VIEW_SET.has(value as DashboardView);
+}
+
+function normalizePendingInput(raw: unknown): PendingInput | undefined {
+  if (!raw || typeof raw !== 'object') {
+    return undefined;
+  }
+
+  const candidate = raw as Record<string, unknown>;
+  switch (candidate.kind) {
+    case 'trade_mint':
+    case 'set_max_buy':
+    case 'set_daily_limit':
+    case 'set_min_score':
+    case 'set_take_profit':
+    case 'set_stop_loss':
+    case 'set_slippage':
+    case 'set_priority':
+    case 'withdraw_destination':
+      return { kind: candidate.kind };
+    case 'trade_amount':
+      return typeof candidate.mint === 'string'
+        ? { kind: 'trade_amount', mint: candidate.mint }
+        : undefined;
+    case 'withdraw_amount':
+      return typeof candidate.destination === 'string'
+        ? { kind: 'withdraw_amount', destination: candidate.destination }
+        : undefined;
+    default:
+      return undefined;
+  }
+}
+
+async function hydrateDashboardSession(chatId: number) {
+  if (dashboardSessionByChat.has(chatId)) {
+    return getDashboardSession(chatId);
+  }
+
+  const result = await query<{
+    message_id: string | null;
+    view: string | null;
+    pending_input: unknown;
+  }>(
+    `
+    SELECT message_id::text, view, pending_input
+    FROM telegram_dashboard_sessions
+    WHERE chat_id = $1
+    `,
+    [chatId]
+  );
+
+  const row = result.rows[0];
+  const session: DashboardSession = {
+    messageId: row?.message_id ? Number(row.message_id) : undefined,
+    view: isDashboardView(row?.view) ? row.view : 'home',
+    pendingInput: normalizePendingInput(row?.pending_input)
+  };
+  dashboardSessionByChat.set(chatId, session);
+  return session;
+}
+
+async function persistDashboardSession(chatId: number) {
+  const session = getDashboardSession(chatId);
+  await query(
+    `
+    INSERT INTO telegram_dashboard_sessions (chat_id, message_id, view, pending_input)
+    VALUES ($1, $2, $3, $4)
+    ON CONFLICT (chat_id) DO UPDATE
+    SET message_id = EXCLUDED.message_id,
+        view = EXCLUDED.view,
+        pending_input = EXCLUDED.pending_input,
+        updated_at = NOW()
+    `,
+    [
+      chatId,
+      session.messageId ?? null,
+      session.view,
+      session.pendingInput ?? null
+    ]
+  );
 }
 
 function newWithdrawCode() {
@@ -289,6 +396,8 @@ async function getIdentity(update: TelegramUpdate): Promise<BotIdentity | null> 
     return null;
   }
 
+  await hydrateDashboardSession(chatId);
+
   return {
     from,
     chatId,
@@ -341,10 +450,12 @@ async function renderDashboard(
         replyMarkup: { inline_keyboard: payload.buttons }
       });
       session.messageId = preferredMessageId;
+      await persistDashboardSession(identity.chatId);
       return;
     } catch (error: any) {
       if (String(error.message).includes('message is not modified')) {
         session.messageId = preferredMessageId;
+        await persistDashboardSession(identity.chatId);
         return;
       }
 
@@ -356,6 +467,7 @@ async function renderDashboard(
     replyMarkup: { inline_keyboard: payload.buttons }
   });
   session.messageId = message.message_id;
+  await persistDashboardSession(identity.chatId);
 }
 
 async function closeDashboard(identity: BotIdentity) {
@@ -374,6 +486,7 @@ async function closeDashboard(identity: BotIdentity) {
           inline_keyboard: [[button('Open Dashboard', 'view:home')]]
         }
       });
+      await persistDashboardSession(identity.chatId);
       return;
     } catch (error: any) {
       logger.error('telegram_dashboard_close_failed', { message: error.message });
@@ -386,6 +499,7 @@ async function closeDashboard(identity: BotIdentity) {
     }
   });
   session.messageId = message.message_id;
+  await persistDashboardSession(identity.chatId);
 }
 
 function navRows(view: DashboardView): InlineKeyboardButton[][] {
