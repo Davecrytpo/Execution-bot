@@ -49,7 +49,7 @@ adminRouter.get('/metrics', (_req, res) => {
 
 adminRouter.get('/sniper', async (_req, res) => {
   try {
-    const [counts, recent, rpcStatus] = await Promise.all([
+    const [counts, recent, rpcStatus, runtime] = await Promise.all([
       query<{
         status: string;
         count: string;
@@ -76,7 +76,8 @@ adminRouter.get('/sniper', async (_req, res) => {
         LIMIT 25
         `
       ),
-      rpcPool.getStatus()
+      rpcPool.getStatus(),
+      getSniperRuntimeStatus()
     ]);
 
     return res.json({
@@ -88,7 +89,7 @@ adminRouter.get('/sniper', async (_req, res) => {
         curve_progress_pct: row.curve_progress_pct === null ? null : Number(row.curve_progress_pct)
       })),
       rpc: rpcStatus,
-      runtime: getSniperRuntimeStatus()
+      runtime
     });
   } catch (error: any) {
     return res.status(500).json({ error: error.message ?? 'admin_sniper_failed' });

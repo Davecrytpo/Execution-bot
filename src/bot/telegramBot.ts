@@ -456,7 +456,7 @@ async function renderHomeView(identity: BotIdentity, notice?: string, prompt?: s
     autoBuyEnabled: settings.auto_buy_enabled,
     routing,
     launchWorkerConfigured: config.enableSniperWorker,
-    workerState: getSniperRuntimeStatus().state
+    workerState: (await getSniperRuntimeStatus()).state
   });
 
   const body = [
@@ -611,12 +611,13 @@ async function renderTradingView(identity: BotIdentity, notice?: string, prompt?
 
 async function renderAutoBuyView(identity: BotIdentity, notice?: string, prompt?: string): Promise<DashboardRender> {
   const settings = await getUserSettings(identity.walletContext.userId);
+  const runtime = await getSniperRuntimeStatus();
   const routing = deriveSourceRoutingState(settings.allowed_sources);
   const autoBuyState = deriveAutoBuyExecutionState({
     autoBuyEnabled: settings.auto_buy_enabled,
     routing,
     launchWorkerConfigured: config.enableSniperWorker,
-    workerState: getSniperRuntimeStatus().state
+    workerState: runtime.state
   });
   const body = [
     '*Auto Buy*',
@@ -812,7 +813,7 @@ async function renderDecisionView(identity: BotIdentity, notice?: string, prompt
 async function renderSourcesView(identity: BotIdentity, notice?: string, prompt?: string): Promise<DashboardRender> {
   const settings = await getUserSettings(identity.walletContext.userId);
   const routing = deriveSourceRoutingState(settings.allowed_sources);
-  const runtime = getSniperRuntimeStatus();
+  const runtime = await getSniperRuntimeStatus();
   const autoBuyState = deriveAutoBuyExecutionState({
     autoBuyEnabled: settings.auto_buy_enabled,
     routing,
@@ -844,7 +845,7 @@ async function renderSourcesView(identity: BotIdentity, notice?: string, prompt?
 async function renderSniperView(identity: BotIdentity, notice?: string, prompt?: string): Promise<DashboardRender> {
   const settings = await getUserSettings(identity.walletContext.userId);
   const routing = deriveSourceRoutingState(settings.allowed_sources);
-  const runtime = getSniperRuntimeStatus();
+  const runtime = await getSniperRuntimeStatus();
   const workerStatus = deriveLaunchWorkerStatus(config.enableSniperWorker, runtime.state);
   const pumpfunStatus = derivePumpfunMonitorStatus(routing, config.enableSniperWorker, runtime.state);
   const autoBuyState = deriveAutoBuyExecutionState({

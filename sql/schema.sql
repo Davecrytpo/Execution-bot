@@ -217,6 +217,24 @@ CREATE TABLE IF NOT EXISTS sniper_wallet_reputation (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS worker_runtime_status (
+    worker_name TEXT PRIMARY KEY,
+    state TEXT NOT NULL,
+    connected BOOLEAN NOT NULL DEFAULT false,
+    websocket_url TEXT,
+    started_at TIMESTAMPTZ,
+    last_connect_at TIMESTAMPTZ,
+    last_disconnect_at TIMESTAMPTZ,
+    last_heartbeat_at TIMESTAMPTZ,
+    last_launch_detected_at TIMESTAMPTZ,
+    last_queued_signal_at TIMESTAMPTZ,
+    last_launch_mint TEXT,
+    last_queued_mint TEXT,
+    last_error TEXT,
+    metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE INDEX IF NOT EXISTS idx_sniper_tokens_status ON sniper_tokens(status, detected_at DESC);
 CREATE INDEX IF NOT EXISTS idx_sniper_events_mint_created ON sniper_events(mint, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_sniper_events_actor_created ON sniper_events(actor_wallet, created_at DESC);
