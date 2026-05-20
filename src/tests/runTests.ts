@@ -17,6 +17,12 @@ async function run() {
   const { evaluateTurboGuardRow, validateSignalPayload } = await import('../services/executionService.js');
   const { isValidPositiveSolAmount } = await import('../bot/wizardLogic.js');
   const {
+    deriveAutoBuyExecutionState,
+    deriveLaunchWorkerStatus,
+    deriveSourceRoutingState,
+    sourceModeLabel
+  } = await import('../bot/dashboardState.js');
+  const {
     computeBondingCurveMetrics,
     decodeBondingCurveState,
     decodePumpGlobalState,
@@ -82,6 +88,32 @@ async function run() {
   assert.equal(isValidPositiveSolAmount('0.1'), true);
   assert.equal(isValidPositiveSolAmount('0'), false);
   assert.equal(isValidPositiveSolAmount('-2'), false);
+  assert.equal(sourceModeLabel(['pumpfun', 'dexscreener']), 'Launch Sniper');
+  assert.equal(sourceModeLabel(['copytrade']), 'Copy Trade only');
+
+  const launchRouting = deriveSourceRoutingState(['pumpfun', 'dexscreener']);
+  assert.equal(launchRouting.launchSourcesEnabled, true);
+  assert.equal(launchRouting.copytradeEnabled, false);
+  assert.equal(
+    deriveAutoBuyExecutionState({
+      autoBuyEnabled: true,
+      routing: launchRouting,
+      launchWorkerConfigured: true,
+      workerState: 'LIVE'
+    }).label,
+    'LIVE'
+  );
+  assert.equal(
+    deriveAutoBuyExecutionState({
+      autoBuyEnabled: true,
+      routing: deriveSourceRoutingState(['copytrade']),
+      launchWorkerConfigured: true,
+      workerState: 'STARTING'
+    }).label,
+    'STANDBY'
+  );
+  assert.equal(deriveLaunchWorkerStatus(false, 'LIVE'), 'PAUSED');
+  assert.equal(deriveLaunchWorkerStatus(true, 'UNSEEN'), 'CONFIGURED');
 
   const sanitized = sanitizeForLog({
     url: 'wss://mainnet.helius-rpc.com/?api-key=super-secret-key',

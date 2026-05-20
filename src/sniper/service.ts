@@ -7,6 +7,14 @@ import { incMetric } from '../lib/metrics.js';
 import { rpcPool } from '../lib/rpcPool.js';
 import { enqueueRiskExitForMint, enqueueSignal } from '../services/executionService.js';
 import {
+  markSniperLaunchDetected,
+  markSniperSignalQueued,
+  markSniperWorkerDisconnected,
+  markSniperWorkerHeartbeat,
+  markSniperWorkerLive,
+  markSniperWorkerStopped
+} from './runtime.js';
+import {
   computeBondingCurveMetrics,
   decodeBondingCurveState,
   decodePumpGlobalState,
@@ -158,6 +166,7 @@ export class SniperService {
         clearTimeout(state.decisionTimer);
       }
     }
+    markSniperWorkerStopped();
     this.ws?.close();
   }
 
@@ -197,6 +206,7 @@ export class SniperService {
       const onOpen = () => {
         this.reconnectAttempts = 0;
         this.lastMessageAt = Date.now();
+        markSniperWorkerLive(url);
         logger.info('sniper_ws_open', { url });
         resolve();
       };
@@ -206,6 +216,11 @@ export class SniperService {
       };
 
       const onClose = async (code: number) => {
+        if (this.stopping) {
+          markSniperWorkerStopped(`ws_closed_${code}`);
+        } else {
+          markSniperWorkerDisconnected(`ws_closed_${code}`);
+        }
         logger.error('sniper_ws_closed', { url, code });
         if (!this.stopping) {
           await this.scheduleReconnect();
@@ -217,6 +232,7 @@ export class SniperService {
       ws.on('close', onClose);
       ws.on('pong', () => {
         this.lastMessageAt = Date.now();
+        markSniperWorkerHeartbeat();
       });
       ws.on('message', (payload) => {
         this.lastMessageAt = Date.now();
@@ -318,6 +334,7 @@ export class SniperService {
   }
 
   private async handleMessage(raw: string) {
+    markSniperWorkerHeartbeat();
     let payload: any;
     try {
       payload = JSON.parse(raw);
@@ -699,6 +716,7 @@ export class SniperService {
     this.launchStates.set(params.mint, state);
     this.subscribeCurve(params.mint, bondingCurve);
     incMetric('sniper.launch_detected');
+    markSniperLaunchDetected(params.mint);
 
     if (creatorWallet) {
       await touchWalletReputation({
@@ -896,6 +914,9 @@ export class SniperService {
           reasons: decision.reasons
         }
       });
+      if (result.queued > 0) {
+        markSniperSignalQueued(mint);
+      }
       return;
     }
 

@@ -71,6 +71,25 @@ export type TelegramUpdate = {
   };
 };
 
+async function parseTelegramResponse<T>(response: Response) {
+  const raw = await response.text();
+  let data: { ok?: boolean; result?: T; description?: string } = {};
+
+  if (raw) {
+    try {
+      data = JSON.parse(raw) as { ok?: boolean; result?: T; description?: string };
+    } catch {
+      data = {};
+    }
+  }
+
+  if (!response.ok || !data.ok) {
+    throw new Error(data.description ?? `telegram_http_${response.status}`);
+  }
+
+  return data.result as T;
+}
+
 async function telegramRequest<T>(method: TelegramMethod, body: Record<string, unknown>): Promise<T> {
   if (!config.telegramBotToken) {
     throw new Error('TELEGRAM_BOT_TOKEN is required');
@@ -82,16 +101,7 @@ async function telegramRequest<T>(method: TelegramMethod, body: Record<string, u
     body: JSON.stringify(body)
   });
 
-  if (!response.ok) {
-    throw new Error(`telegram_http_${response.status}`);
-  }
-
-  const data = await response.json() as { ok: boolean; result: T; description?: string };
-  if (!data.ok) {
-    throw new Error(data.description ?? 'telegram_api_error');
-  }
-
-  return data.result;
+  return parseTelegramResponse<T>(response);
 }
 
 export async function getUpdates(offset: number): Promise<TelegramUpdate[]> {
@@ -142,16 +152,7 @@ export async function sendPhoto(
     body: form
   });
 
-  if (!response.ok) {
-    throw new Error(`telegram_http_${response.status}`);
-  }
-
-  const data = await response.json() as { ok: boolean; result: TelegramMessage; description?: string };
-  if (!data.ok) {
-    throw new Error(data.description ?? 'telegram_api_error');
-  }
-
-  return data.result;
+  return parseTelegramResponse<TelegramMessage>(response);
 }
 
 export async function editMessageText(

@@ -32,6 +32,14 @@ import { enqueueManualTradeForUser } from '../services/executionService.js';
 import { logger } from '../lib/logger.js';
 import { logAuditAction } from '../lib/audit.js';
 import { isValidPositiveSolAmount } from './wizardLogic.js';
+import {
+  deriveAutoBuyExecutionState,
+  deriveLaunchWorkerStatus,
+  derivePumpfunMonitorStatus,
+  deriveSourceRoutingState,
+  sourceModeLabel
+} from './dashboardState.js';
+import { getSniperRuntimeStatus } from '../sniper/runtime.js';
 
 const MIN_BUY_SOL = 0.005;
 const DEGEN_MIN_SCORE = 18;
@@ -149,36 +157,6 @@ function getDashboardSession(chatId: number): DashboardSession {
   return created;
 }
 
-function sourceModeLabel(rawSources: unknown): string {
-  const sources = Array.isArray(rawSources) ? rawSources.map((item) => String(item)) : [];
-  const normalized = new Set(sources);
-  if (normalized.has('*')) {
-    return 'All sources';
-  }
-  if (normalized.size === 0) {
-    return 'No sources';
-  }
-  if (normalized.size === 1 && normalized.has('copytrade')) {
-    return 'Copy Trade only';
-  }
-  if (
-    normalized.size === 2
-    && normalized.has('pumpfun')
-    && normalized.has('dexscreener')
-  ) {
-    return 'Launch Sniper';
-  }
-  if (
-    normalized.size === 3
-    && normalized.has('pumpfun')
-    && normalized.has('dexscreener')
-    && normalized.has('copytrade')
-  ) {
-    return 'Hybrid';
-  }
-  return sources.join(', ');
-}
-
 function newWithdrawCode() {
   return String(Math.floor(100000 + Math.random() * 900000));
 }
@@ -204,6 +182,10 @@ function formatCheckedAt(value: string | null | undefined) {
   }
 
   return `${date.toISOString().replace('T', ' ').slice(0, 16)} UTC`;
+}
+
+function formatStatusTimestamp(value: string | null | undefined, emptyLabel: string) {
+  return value ? formatCheckedAt(value) : emptyLabel;
 }
 
 function humanizeErrorMessage(error: unknown) {
@@ -361,9 +343,12 @@ async function renderDashboard(
       session.messageId = preferredMessageId;
       return;
     } catch (error: any) {
-      if (!String(error.message).includes('message is not modified')) {
-        logger.error('telegram_dashboard_edit_failed', { message: error.message, view });
+      if (String(error.message).includes('message is not modified')) {
+        session.messageId = preferredMessageId;
+        return;
       }
+
+      logger.error('telegram_dashboard_edit_failed', { message: error.message, view });
     }
   }
 
@@ -466,12 +451,19 @@ async function buildDashboardView(identity: BotIdentity, session: DashboardSessi
 async function renderHomeView(identity: BotIdentity, notice?: string, prompt?: string): Promise<DashboardRender> {
   const settings = await getUserSettings(identity.walletContext.userId);
   const balance = await safeCachedWalletBalance(identity.walletContext.wallet.id);
+  const routing = deriveSourceRoutingState(settings.allowed_sources);
+  const autoBuyState = deriveAutoBuyExecutionState({
+    autoBuyEnabled: settings.auto_buy_enabled,
+    routing,
+    launchWorkerConfigured: config.enableSniperWorker,
+    workerState: getSniperRuntimeStatus().state
+  });
 
   const body = [
     '*Overview*',
     `Wallet balance: \`${balance.balanceSol === null ? 'Tap Wallet to sync' : `${formatSol(balance.balanceSol)} SOL`}\``,
     `Balance sync: \`${formatCheckedAt(balance.checkedAt)}\``,
-    `Auto Buy: \`${settings.auto_buy_enabled ? 'ON' : 'OFF'}\``,
+    `Auto Buy: \`${autoBuyState.label}\``,
     `Auto Sell: \`${settings.auto_sell_enabled ? 'ON' : 'OFF'}\``,
     `Signal mode: \`${sourceModeLabel(settings.allowed_sources)}\``,
     `Risk mode: \`${settings.degen_turbo_enabled ? 'Turbo Guarded' : 'Standard'}\``,
@@ -619,13 +611,23 @@ async function renderTradingView(identity: BotIdentity, notice?: string, prompt?
 
 async function renderAutoBuyView(identity: BotIdentity, notice?: string, prompt?: string): Promise<DashboardRender> {
   const settings = await getUserSettings(identity.walletContext.userId);
+  const routing = deriveSourceRoutingState(settings.allowed_sources);
+  const autoBuyState = deriveAutoBuyExecutionState({
+    autoBuyEnabled: settings.auto_buy_enabled,
+    routing,
+    launchWorkerConfigured: config.enableSniperWorker,
+    workerState: getSniperRuntimeStatus().state
+  });
   const body = [
     '*Auto Buy*',
-    `Status: \`${settings.auto_buy_enabled ? 'ON' : 'OFF'}\``,
+    `Execution status: \`${autoBuyState.label}\``,
+    `Switch: \`${settings.auto_buy_enabled ? 'ON' : 'OFF'}\``,
     `Max buy size: \`${formatSol(settings.max_buy_sol, 4)} SOL\``,
     `Daily limit: \`${formatSol(settings.daily_limit_sol, 4)} SOL\``,
     `Minimum score: \`${settings.min_score}\``,
-    `Signal mode: \`${sourceModeLabel(settings.allowed_sources)}\``
+    `Signal mode: \`${sourceModeLabel(settings.allowed_sources)}\``,
+    '',
+    autoBuyState.detail
   ];
 
   return {
@@ -809,13 +811,24 @@ async function renderDecisionView(identity: BotIdentity, notice?: string, prompt
 
 async function renderSourcesView(identity: BotIdentity, notice?: string, prompt?: string): Promise<DashboardRender> {
   const settings = await getUserSettings(identity.walletContext.userId);
+  const routing = deriveSourceRoutingState(settings.allowed_sources);
+  const runtime = getSniperRuntimeStatus();
+  const autoBuyState = deriveAutoBuyExecutionState({
+    autoBuyEnabled: settings.auto_buy_enabled,
+    routing,
+    launchWorkerConfigured: config.enableSniperWorker,
+    workerState: runtime.state
+  });
   const body = [
     '*Signal Sources*',
     `Current mode: \`${sourceModeLabel(settings.allowed_sources)}\``,
+    `Pump.fun route: \`${routing.pumpfunEnabled ? 'ON' : 'OFF'}\``,
+    `DexScreener route: \`${routing.dexscreenerEnabled ? 'ON' : 'OFF'}\``,
+    `Copy Trade route: \`${routing.copytradeEnabled ? 'ON' : 'OFF'}\``,
+    `Launch worker: \`${deriveLaunchWorkerStatus(config.enableSniperWorker, runtime.state)}\``,
+    `Auto Buy pipeline: \`${autoBuyState.label}\``,
     '',
-    config.enableSniperWorker
-      ? 'Choose the source profile that matches how you want the bot to trade.'
-      : 'Sniper monitoring is paused on this deployment profile. Copy-trade and manual trading remain available.'
+    autoBuyState.detail
   ];
 
   return {
@@ -830,21 +843,32 @@ async function renderSourcesView(identity: BotIdentity, notice?: string, prompt?
 
 async function renderSniperView(identity: BotIdentity, notice?: string, prompt?: string): Promise<DashboardRender> {
   const settings = await getUserSettings(identity.walletContext.userId);
-  const sources = Array.isArray(settings.allowed_sources) ? settings.allowed_sources.map((item) => String(item)) : ['*'];
-  const pumpfunEnabled = sources.includes('*') || sources.includes('pumpfun');
-  const dexscreenerEnabled = sources.includes('*') || sources.includes('dexscreener');
+  const routing = deriveSourceRoutingState(settings.allowed_sources);
+  const runtime = getSniperRuntimeStatus();
+  const workerStatus = deriveLaunchWorkerStatus(config.enableSniperWorker, runtime.state);
+  const pumpfunStatus = derivePumpfunMonitorStatus(routing, config.enableSniperWorker, runtime.state);
+  const autoBuyState = deriveAutoBuyExecutionState({
+    autoBuyEnabled: settings.auto_buy_enabled,
+    routing,
+    launchWorkerConfigured: config.enableSniperWorker,
+    workerState: runtime.state
+  });
 
   const body = [
     '*Sniper Status*',
-    `Worker status: \`${config.enableSniperWorker ? 'LIVE' : 'PAUSED'}\``,
-    `Pump.fun enabled: \`${pumpfunEnabled ? 'YES' : 'NO'}\``,
-    `DexScreener enabled: \`${dexscreenerEnabled ? 'YES' : 'NO'}\``,
+    `Launch worker: \`${workerStatus}\``,
+    `Auto Buy pipeline: \`${autoBuyState.label}\``,
+    `Auto Buy switch: \`${settings.auto_buy_enabled ? 'ON' : 'OFF'}\``,
+    `Routing mode: \`${sourceModeLabel(settings.allowed_sources)}\``,
+    `Pump.fun monitor: \`${pumpfunStatus}\``,
+    `DexScreener intake: \`${routing.dexscreenerEnabled ? 'ON' : 'OFF'}\``,
+    `Copy Trade intake: \`${routing.copytradeEnabled ? 'ON' : 'OFF'}\``,
     `Min score: \`${settings.min_score}\``,
-    `Auto Buy: \`${settings.auto_buy_enabled ? 'ON' : 'OFF'}\``,
     `Max buy size: \`${formatSol(settings.max_buy_sol, 4)} SOL\``,
-    config.enableSniperWorker
-      ? 'Live launch monitoring is active for this deployment.'
-      : 'Live launch monitoring is paused in this deployment profile to keep free hosting stable.'
+    `Last launch seen: \`${formatStatusTimestamp(runtime.lastLaunchDetectedAt, 'No launch observed yet')}\``,
+    `Last sniper queue: \`${formatStatusTimestamp(runtime.lastQueuedSignalAt, 'No sniper buy queued yet')}\``,
+    '',
+    autoBuyState.detail
   ];
 
   return {
@@ -990,19 +1014,20 @@ async function processPendingInput(update: TelegramUpdate, text: string) {
   if (!pending) {
     return false;
   }
+  const activeDashboardMessageId = session.messageId;
 
   try {
     switch (pending.kind) {
       case 'trade_mint': {
         new PublicKey(text.trim());
         session.pendingInput = { kind: 'trade_amount', mint: text.trim() };
-        await showDashboard(identity, 'trading', 'Mint saved. Send the amount in SOL next.', undefined, true);
+        await showDashboard(identity, 'trading', 'Mint saved. Send the amount in SOL next.', activeDashboardMessageId, true);
         return true;
       }
       case 'trade_amount': {
         const amountSol = Number(text.trim());
         if (!Number.isFinite(amountSol) || amountSol < MIN_BUY_SOL) {
-          await showDashboard(identity, 'trading', `Trade amount must be at least ${MIN_BUY_SOL} SOL.`, undefined, true);
+          await showDashboard(identity, 'trading', `Trade amount must be at least ${MIN_BUY_SOL} SOL.`, activeDashboardMessageId, true);
           return true;
         }
 
@@ -1017,103 +1042,103 @@ async function processPendingInput(update: TelegramUpdate, text: string) {
           orderId: result.orderId
         });
         session.pendingInput = undefined;
-        await showDashboard(identity, 'trading', `Trade queued: ${result.amountSol} SOL on ${pending.mint}.`);
+        await showDashboard(identity, 'trading', `Trade queued: ${result.amountSol} SOL on ${pending.mint}.`, activeDashboardMessageId);
         return true;
       }
       case 'set_max_buy': {
         const value = Number(text.trim());
         if (!Number.isFinite(value) || value < MIN_BUY_SOL) {
-          await showDashboard(identity, 'auto_buy', `Enter a number not lower than ${MIN_BUY_SOL} SOL.`, undefined, true);
+          await showDashboard(identity, 'auto_buy', `Enter a number not lower than ${MIN_BUY_SOL} SOL.`, activeDashboardMessageId, true);
           return true;
         }
         await updateUserSettings(identity.walletContext.userId, { maxBuySol: value });
         await audit(identity, 'settings.max_buy_sol', { value });
         session.pendingInput = undefined;
-        await showDashboard(identity, 'auto_buy', `Max buy size updated to ${value} SOL.`);
+        await showDashboard(identity, 'auto_buy', `Max buy size updated to ${value} SOL.`, activeDashboardMessageId);
         return true;
       }
       case 'set_daily_limit': {
         const value = Number(text.trim());
         if (!Number.isFinite(value) || value <= 0) {
-          await showDashboard(identity, 'auto_buy', 'Enter a valid daily limit in SOL.', undefined, true);
+          await showDashboard(identity, 'auto_buy', 'Enter a valid daily limit in SOL.', activeDashboardMessageId, true);
           return true;
         }
         await updateUserSettings(identity.walletContext.userId, { dailyLimitSol: value });
         await audit(identity, 'settings.daily_limit_sol', { value });
         session.pendingInput = undefined;
-        await showDashboard(identity, 'auto_buy', `Daily limit updated to ${value} SOL.`);
+        await showDashboard(identity, 'auto_buy', `Daily limit updated to ${value} SOL.`, activeDashboardMessageId);
         return true;
       }
       case 'set_min_score': {
         const value = Number(text.trim());
         if (!Number.isFinite(value) || value < 0 || value > 100) {
-          await showDashboard(identity, 'auto_buy', 'Minimum score must be between 0 and 100.', undefined, true);
+          await showDashboard(identity, 'auto_buy', 'Minimum score must be between 0 and 100.', activeDashboardMessageId, true);
           return true;
         }
         await updateUserSettings(identity.walletContext.userId, { minScore: value });
         await audit(identity, 'settings.min_score', { value });
         session.pendingInput = undefined;
-        await showDashboard(identity, 'auto_buy', `Minimum score updated to ${value}.`);
+        await showDashboard(identity, 'auto_buy', `Minimum score updated to ${value}.`, activeDashboardMessageId);
         return true;
       }
       case 'set_take_profit': {
         const value = Number(text.trim());
         if (!Number.isFinite(value) || value <= 0) {
-          await showDashboard(identity, 'auto_sell', 'Take profit must be a positive percent.', undefined, true);
+          await showDashboard(identity, 'auto_sell', 'Take profit must be a positive percent.', activeDashboardMessageId, true);
           return true;
         }
         await updateUserSettings(identity.walletContext.userId, { takeProfitPct: value });
         await audit(identity, 'settings.take_profit_pct', { value });
         session.pendingInput = undefined;
-        await showDashboard(identity, 'auto_sell', `Take profit updated to ${value}%.`);
+        await showDashboard(identity, 'auto_sell', `Take profit updated to ${value}%.`, activeDashboardMessageId);
         return true;
       }
       case 'set_stop_loss': {
         const value = Number(text.trim());
         if (!Number.isFinite(value) || value <= 0) {
-          await showDashboard(identity, 'auto_sell', 'Stop loss must be a positive percent.', undefined, true);
+          await showDashboard(identity, 'auto_sell', 'Stop loss must be a positive percent.', activeDashboardMessageId, true);
           return true;
         }
         await updateUserSettings(identity.walletContext.userId, { stopLossPct: value });
         await audit(identity, 'settings.stop_loss_pct', { value });
         session.pendingInput = undefined;
-        await showDashboard(identity, 'auto_sell', `Stop loss updated to ${value}%.`);
+        await showDashboard(identity, 'auto_sell', `Stop loss updated to ${value}%.`, activeDashboardMessageId);
         return true;
       }
       case 'set_slippage': {
         const value = Number(text.trim());
         if (!Number.isFinite(value) || value < 50 || value > 5000) {
-          await showDashboard(identity, 'settings', 'Slippage must be between 50 and 5000 bps.', undefined, true);
+          await showDashboard(identity, 'settings', 'Slippage must be between 50 and 5000 bps.', activeDashboardMessageId, true);
           return true;
         }
         await updateUserSettings(identity.walletContext.userId, { slippageBps: value });
         await audit(identity, 'settings.slippage_bps', { value });
         session.pendingInput = undefined;
-        await showDashboard(identity, 'settings', `Slippage updated to ${value} bps.`);
+        await showDashboard(identity, 'settings', `Slippage updated to ${value} bps.`, activeDashboardMessageId);
         return true;
       }
       case 'set_priority': {
         const solValue = Number(text.trim());
         if (!Number.isFinite(solValue) || solValue < 0) {
-          await showDashboard(identity, 'settings', 'Priority fee must be zero or higher.', undefined, true);
+          await showDashboard(identity, 'settings', 'Priority fee must be zero or higher.', activeDashboardMessageId, true);
           return true;
         }
         const lamports = Math.floor(solValue * LAMPORTS_PER_SOL);
         await updateUserSettings(identity.walletContext.userId, { priorityFeeLamports: lamports });
         await audit(identity, 'settings.priority_fee_lamports', { value: lamports });
         session.pendingInput = undefined;
-        await showDashboard(identity, 'settings', `Priority fee updated to ${solValue} SOL.`);
+        await showDashboard(identity, 'settings', `Priority fee updated to ${solValue} SOL.`, activeDashboardMessageId);
         return true;
       }
       case 'withdraw_destination': {
         new PublicKey(text.trim());
         session.pendingInput = { kind: 'withdraw_amount', destination: text.trim() };
-        await showDashboard(identity, 'wallet', 'Destination saved. Send the withdrawal amount in SOL.', undefined, true);
+        await showDashboard(identity, 'wallet', 'Destination saved. Send the withdrawal amount in SOL.', activeDashboardMessageId, true);
         return true;
       }
       case 'withdraw_amount': {
         if (!isValidPositiveSolAmount(text)) {
-          await showDashboard(identity, 'wallet', 'Withdrawal amount must be a positive SOL amount.', undefined, true);
+          await showDashboard(identity, 'wallet', 'Withdrawal amount must be a positive SOL amount.', activeDashboardMessageId, true);
           return true;
         }
 
@@ -1129,7 +1154,7 @@ async function processPendingInput(update: TelegramUpdate, text: string) {
         });
         await audit(identity, 'withdrawal_confirmation_created', { destination: pending.destination, amount });
         session.pendingInput = undefined;
-        await showDashboard(identity, 'wallet_withdraw_confirm', 'Review the withdrawal and confirm it below.');
+        await showDashboard(identity, 'wallet_withdraw_confirm', 'Review the withdrawal and confirm it below.', activeDashboardMessageId);
         return true;
       }
       default:
@@ -1138,11 +1163,11 @@ async function processPendingInput(update: TelegramUpdate, text: string) {
   } catch (error: any) {
     if (pending.kind === 'trade_mint' || pending.kind === 'withdraw_destination') {
       const targetView = pending.kind === 'trade_mint' ? 'trading' : 'wallet';
-      await showDashboard(identity, targetView, 'That address or mint was not valid.', undefined, true);
+      await showDashboard(identity, targetView, 'That address or mint was not valid.', activeDashboardMessageId, true);
       return true;
     }
 
-    await showDashboard(identity, session.view, humanizeErrorMessage(error), undefined, true);
+    await showDashboard(identity, session.view, humanizeErrorMessage(error), activeDashboardMessageId, true);
     return true;
   }
 }

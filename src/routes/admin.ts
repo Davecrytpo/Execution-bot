@@ -3,6 +3,7 @@ import { config } from '../config.js';
 import { query } from '../lib/db.js';
 import { getMetricsSnapshot } from '../lib/metrics.js';
 import { rpcPool } from '../lib/rpcPool.js';
+import { getSniperRuntimeStatus } from '../sniper/runtime.js';
 
 export const adminRouter = Router();
 
@@ -86,7 +87,8 @@ adminRouter.get('/sniper', async (_req, res) => {
         liquidity_sol: row.liquidity_sol === null ? null : Number(row.liquidity_sol),
         curve_progress_pct: row.curve_progress_pct === null ? null : Number(row.curve_progress_pct)
       })),
-      rpc: rpcStatus
+      rpc: rpcStatus,
+      runtime: getSniperRuntimeStatus()
     });
   } catch (error: any) {
     return res.status(500).json({ error: error.message ?? 'admin_sniper_failed' });
