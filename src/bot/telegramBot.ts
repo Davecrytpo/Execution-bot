@@ -41,7 +41,7 @@ import {
   deriveSourceRoutingState,
   sourceModeLabel
 } from './dashboardState.js';
-import { getSniperRuntimeStatus } from '../sniper/runtime.js';
+import { getSniperRuntimeStatus, type SniperRuntimeStatus } from '../sniper/runtime.js';
 
 const MIN_BUY_SOL = 0.005;
 const DEGEN_MIN_SCORE = 18;
@@ -53,6 +53,10 @@ const TURBO_TOKEN_COOLDOWN_MINUTES = 10;
 const TURBO_DUPLICATE_WINDOW_SECONDS = 90;
 const LAMPORTS_PER_SOL = 1_000_000_000;
 const START_BANNER_PATH = join(process.cwd(), 'assets', 'telegram-logo.png');
+
+function isLaunchWorkerAvailable(runtime: SniperRuntimeStatus) {
+  return config.enableSniperWorker || runtime.state !== 'UNSEEN' || Boolean(runtime.startedAt);
+}
 
 type DashboardView =
   | 'home'
@@ -656,11 +660,13 @@ async function renderHomeView(identity: BotIdentity, notice?: string, prompt?: s
   const settings = await getUserSettings(identity.walletContext.userId);
   const balance = await safeCachedWalletBalance(identity.walletContext.wallet.id);
   const routing = deriveSourceRoutingState(settings.allowed_sources);
+  const runtime = await getSniperRuntimeStatus();
+  const launchWorkerAvailable = isLaunchWorkerAvailable(runtime);
   const autoBuyState = deriveAutoBuyExecutionState({
     autoBuyEnabled: settings.auto_buy_enabled,
     routing,
-    launchWorkerConfigured: config.enableSniperWorker,
-    workerState: (await getSniperRuntimeStatus()).state
+    launchWorkerConfigured: launchWorkerAvailable,
+    workerState: runtime.state
   });
 
   const autoBuyEmoji = autoBuyState.label === 'LIVE' ? '🟢' : autoBuyState.label === 'STANDBY' ? '🟡' : autoBuyState.label === 'STARTING' ? '🔵' : autoBuyState.label === 'PAUSED' ? '⏸️' : '⭕';
@@ -818,11 +824,12 @@ async function renderTradingView(identity: BotIdentity, notice?: string, prompt?
 async function renderAutoBuyView(identity: BotIdentity, notice?: string, prompt?: string): Promise<DashboardRender> {
   const settings = await getUserSettings(identity.walletContext.userId);
   const runtime = await getSniperRuntimeStatus();
+  const launchWorkerAvailable = isLaunchWorkerAvailable(runtime);
   const routing = deriveSourceRoutingState(settings.allowed_sources);
   const autoBuyState = deriveAutoBuyExecutionState({
     autoBuyEnabled: settings.auto_buy_enabled,
     routing,
-    launchWorkerConfigured: config.enableSniperWorker,
+    launchWorkerConfigured: launchWorkerAvailable,
     workerState: runtime.state
   });
   const abEmoji = autoBuyState.label === 'LIVE' ? '🟢' : autoBuyState.label === 'STANDBY' ? '🟡' : autoBuyState.label === 'STARTING' ? '🔵' : autoBuyState.label === 'DEGRADED' ? '🟠' : autoBuyState.label === 'PAUSED' ? '⏸️' : '⭕';
@@ -1043,10 +1050,11 @@ async function renderSourcesView(identity: BotIdentity, notice?: string, prompt?
   const settings = await getUserSettings(identity.walletContext.userId);
   const routing = deriveSourceRoutingState(settings.allowed_sources);
   const runtime = await getSniperRuntimeStatus();
+  const launchWorkerAvailable = isLaunchWorkerAvailable(runtime);
   const autoBuyState = deriveAutoBuyExecutionState({
     autoBuyEnabled: settings.auto_buy_enabled,
     routing,
-    launchWorkerConfigured: config.enableSniperWorker,
+    launchWorkerConfigured: launchWorkerAvailable,
     workerState: runtime.state
   });
   const body = [
@@ -1055,7 +1063,7 @@ async function renderSourcesView(identity: BotIdentity, notice?: string, prompt?
     `Pump.fun route: \`${routing.pumpfunEnabled ? 'ON' : 'OFF'}\``,
     `DexScreener route: \`${routing.dexscreenerEnabled ? 'ON' : 'OFF'}\``,
     `Copy Trade route: \`${routing.copytradeEnabled ? 'ON' : 'OFF'}\``,
-    `Launch worker: \`${deriveLaunchWorkerStatus(config.enableSniperWorker, runtime.state)}\``,
+    `Launch worker: \`${deriveLaunchWorkerStatus(launchWorkerAvailable, runtime.state)}\``,
     `Auto Buy pipeline: \`${autoBuyState.label}\``,
     '',
     autoBuyState.detail
@@ -1075,12 +1083,13 @@ async function renderSniperView(identity: BotIdentity, notice?: string, prompt?:
   const settings = await getUserSettings(identity.walletContext.userId);
   const routing = deriveSourceRoutingState(settings.allowed_sources);
   const runtime = await getSniperRuntimeStatus();
-  const workerStatus = deriveLaunchWorkerStatus(config.enableSniperWorker, runtime.state);
-  const pumpfunStatus = derivePumpfunMonitorStatus(routing, config.enableSniperWorker, runtime.state);
+  const launchWorkerAvailable = isLaunchWorkerAvailable(runtime);
+  const workerStatus = deriveLaunchWorkerStatus(launchWorkerAvailable, runtime.state);
+  const pumpfunStatus = derivePumpfunMonitorStatus(routing, launchWorkerAvailable, runtime.state);
   const autoBuyState = deriveAutoBuyExecutionState({
     autoBuyEnabled: settings.auto_buy_enabled,
     routing,
-    launchWorkerConfigured: config.enableSniperWorker,
+    launchWorkerConfigured: launchWorkerAvailable,
     workerState: runtime.state
   });
 
@@ -1575,7 +1584,7 @@ async function handleCallbackQuery(update: TelegramUpdate) {
         await showDashboard(identity, 'auto_buy', 'Degen preset applied successfully.', preferredMessageId);
         return;
       case 'act:source_sniper':
-        if (!config.enableSniperWorker) {
+        if (!isLaunchWorkerAvailable(await getSniperRuntimeStatus())) {
           await showDashboard(
             identity,
             'sources',
@@ -1590,7 +1599,7 @@ async function handleCallbackQuery(update: TelegramUpdate) {
         await updateSourceMode(identity, ['copytrade'], 'Signal mode set to Copy Trade only.', preferredMessageId);
         return;
       case 'act:source_hybrid':
-        if (!config.enableSniperWorker) {
+        if (!isLaunchWorkerAvailable(await getSniperRuntimeStatus())) {
           await showDashboard(
             identity,
             'sources',
@@ -1602,7 +1611,7 @@ async function handleCallbackQuery(update: TelegramUpdate) {
         await updateSourceMode(identity, ['pumpfun', 'dexscreener', 'copytrade'], 'Signal mode set to Hybrid.', preferredMessageId);
         return;
       case 'act:source_all':
-        if (!config.enableSniperWorker) {
+        if (!isLaunchWorkerAvailable(await getSniperRuntimeStatus())) {
           await showDashboard(
             identity,
             'sources',
