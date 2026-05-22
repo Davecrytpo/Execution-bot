@@ -342,27 +342,74 @@ function pendingPrompt(input?: PendingInput): string | undefined {
 
   switch (input.kind) {
     case 'trade_mint':
-      return 'Send the token mint you want to buy.';
+      return [
+        '📌 *Enter the token mint address* you want to buy.',
+        'This is the Solana contract address for the token.',
+        'Example: `So11111111111111111111111111111111111111112`'
+      ].join('\n');
     case 'trade_amount':
-      return `Mint saved: \`${input.mint}\`. Send the amount in SOL, for example \`0.05\`.`;
+      return [
+        `✅ Mint saved: \`${input.mint.slice(0, 8)}...${input.mint.slice(-6)}\``,
+        `💰 *Now enter the amount in SOL* you want to spend on this trade.`,
+        `Minimum is \`${MIN_BUY_SOL} SOL\`. Example: \`0.05\``
+      ].join('\n');
     case 'set_max_buy':
-      return `Send your new max buy size in SOL. Minimum is \`${MIN_BUY_SOL} SOL\`.`;
+      return [
+        '💰 *Enter your new maximum buy size in SOL.*',
+        'This is the maximum SOL the bot will spend per single trade.',
+        `Minimum allowed: \`${MIN_BUY_SOL} SOL\`. Example: \`0.05\``
+      ].join('\n');
     case 'set_daily_limit':
-      return 'Send your new daily buy limit in SOL, for example `0.25`.';
+      return [
+        '📅 *Enter your daily buy limit in SOL.*',
+        'The bot pauses auto-buying once this total is spent within 24 hours.',
+        'Example: `0.25`'
+      ].join('\n');
     case 'set_min_score':
-      return 'Send your new minimum score from 0 to 100.';
+      return [
+        '⭐ *Enter your minimum signal score (0–100).*',
+        'Only signals at or above this score trigger a buy.',
+        '• Lower = more trades  •  Higher = higher quality only',
+        'Example: `60`'
+      ].join('\n');
     case 'set_take_profit':
-      return 'Send your new take-profit percent, for example `75`.';
+      return [
+        '🏁 *Enter your take-profit percentage.*',
+        'Bot sells automatically when your position gains this much.',
+        'Example: `75` = sell when position is up +75%'
+      ].join('\n');
     case 'set_stop_loss':
-      return 'Send your new stop-loss percent, for example `20`.';
+      return [
+        '🧯 *Enter your stop-loss percentage.*',
+        'Bot sells automatically to cut losses at this threshold.',
+        'Example: `20` = sell if position drops -20% from entry'
+      ].join('\n');
     case 'set_slippage':
-      return 'Send your new slippage in basis points, between `50` and `5000`.';
+      return [
+        '🌊 *Enter your slippage tolerance in basis points (bps).*',
+        '100 bps = 1%. Valid range: `50` to `5000`.',
+        '• `300` = 3% (recommended)  •  `1000` = 10% (low-liquidity)',
+        'Example: `300`'
+      ].join('\n');
     case 'set_priority':
-      return 'Send your new priority fee in SOL, for example `0.0001`.';
+      return [
+        '⚡ *Enter your priority fee in SOL.*',
+        'Higher = faster transaction landing on Solana.',
+        '• `0.0001` low  •  `0.001` recommended  •  `0.005` sniper mode',
+        'Example: `0.001`'
+      ].join('\n');
     case 'withdraw_destination':
-      return 'Send the Solana wallet address you want to withdraw to.';
+      return [
+        '📤 *Enter the Solana wallet address to withdraw to.*',
+        '⚠️ Double-check — withdrawals cannot be reversed.',
+        'Example: `YourSolanaWalletAddressHere`'
+      ].join('\n');
     case 'withdraw_amount':
-      return `Destination saved: \`${input.destination}\`. Send the withdrawal amount in SOL.`;
+      return [
+        `✅ Destination: \`${input.destination.slice(0, 8)}...${input.destination.slice(-6)}\``,
+        '💸 *Now enter the amount in SOL* you want to withdraw.',
+        'Example: `0.5`'
+      ].join('\n');
     default:
       return undefined;
   }
@@ -616,16 +663,18 @@ async function renderHomeView(identity: BotIdentity, notice?: string, prompt?: s
     workerState: (await getSniperRuntimeStatus()).state
   });
 
+  const autoBuyEmoji = autoBuyState.label === 'LIVE' ? '🟢' : autoBuyState.label === 'STANDBY' ? '🟡' : autoBuyState.label === 'STARTING' ? '🔵' : autoBuyState.label === 'PAUSED' ? '⏸️' : '⭕';
+  const balanceDisplay = balance.balanceSol === null ? '— tap Wallet → Refresh Balance' : `${formatSol(balance.balanceSol)} SOL`;
   const body = [
     '*Overview*',
-    `Wallet balance: \`${balance.balanceSol === null ? 'Tap Wallet to sync' : `${formatSol(balance.balanceSol)} SOL`}\``,
-    `Balance sync: \`${formatCheckedAt(balance.checkedAt)}\``,
-    `Auto Buy: \`${autoBuyState.label}\``,
-    `Auto Sell: \`${settings.auto_sell_enabled ? 'ON' : 'OFF'}\``,
-    `Signal mode: \`${sourceModeLabel(settings.allowed_sources)}\``,
-    `Risk mode: \`${settings.degen_turbo_enabled ? 'Turbo Guarded' : 'Standard'}\``,
+    `💼 Wallet balance: \`${balanceDisplay}\``,
+    `🕐 Balance sync: \`${formatCheckedAt(balance.checkedAt)}\``,
+    `${autoBuyEmoji} Auto Buy: \`${autoBuyState.label}\``,
+    `🎯 Auto Sell: \`${settings.auto_sell_enabled ? 'ON ✅' : 'OFF ❌'}\``,
+    `📡 Signal mode: \`${sourceModeLabel(settings.allowed_sources)}\``,
+    `⚡ Risk mode: \`${settings.degen_turbo_enabled ? 'Turbo Guarded' : 'Standard'}\``,
     '',
-    'Choose a section below to manage your bot like a clean trading dashboard.'
+    'Use the buttons below to manage your bot.'
   ];
 
   return {
@@ -776,17 +825,24 @@ async function renderAutoBuyView(identity: BotIdentity, notice?: string, prompt?
     launchWorkerConfigured: config.enableSniperWorker,
     workerState: runtime.state
   });
+  const abEmoji = autoBuyState.label === 'LIVE' ? '🟢' : autoBuyState.label === 'STANDBY' ? '🟡' : autoBuyState.label === 'STARTING' ? '🔵' : autoBuyState.label === 'DEGRADED' ? '🟠' : autoBuyState.label === 'PAUSED' ? '⏸️' : '⭕';
   const body = [
     '*Auto Buy*',
-    `Execution status: \`${autoBuyState.label}\``,
-    `Switch: \`${settings.auto_buy_enabled ? 'ON' : 'OFF'}\``,
+    `Execution status: ${abEmoji} \`${autoBuyState.label}\``,
+    `Switch: \`${settings.auto_buy_enabled ? 'ON ✅' : 'OFF ❌'}\``,
     `Max buy size: \`${formatSol(settings.max_buy_sol, 4)} SOL\``,
     `Daily limit: \`${formatSol(settings.daily_limit_sol, 4)} SOL\``,
     `Minimum score: \`${settings.min_score}\``,
     `Signal mode: \`${sourceModeLabel(settings.allowed_sources)}\``,
     '',
-    autoBuyState.detail
+    `ℹ️ ${autoBuyState.detail}`
   ];
+  if (autoBuyState.label === 'STANDBY') {
+    body.push('', '💡 Bot is ready — it will trade automatically when a signal arrives.');
+  }
+  if (autoBuyState.label === 'PAUSED') {
+    body.push('', '⚠️ Set ENABLE_SNIPER_WORKER=true in Render env vars and redeploy.');
+  }
 
   return {
     text: composeDashboardText('Auto Buy', body, notice, prompt),
@@ -804,11 +860,12 @@ async function renderAutoSellView(identity: BotIdentity, notice?: string, prompt
   const settings = await getUserSettings(identity.walletContext.userId);
   const body = [
     '*Auto Sell*',
-    `Status: \`${settings.auto_sell_enabled ? 'ON' : 'OFF'}\``,
-    `Take profit: \`${settings.take_profit_pct}%\``,
-    `Stop loss: \`${settings.stop_loss_pct}%\``,
+    `Status: \`${settings.auto_sell_enabled ? 'ON ✅' : 'OFF ❌'}\``,
+    `Take profit: \`+${settings.take_profit_pct}%\` 🏁`,
+    `Stop loss: \`-${settings.stop_loss_pct}%\` 🧯`,
     '',
-    'Use toggles and simple controls instead of separate technical commands.'
+    'Bot monitors all open positions every 30 seconds.',
+    'It auto-sells when take-profit or stop-loss is hit.'
   ];
 
   return {
@@ -823,12 +880,14 @@ async function renderAutoSellView(identity: BotIdentity, notice?: string, prompt
 
 async function renderSettingsView(identity: BotIdentity, notice?: string, prompt?: string): Promise<DashboardRender> {
   const settings = await getUserSettings(identity.walletContext.userId);
+  const prioritySol = formatSol(solFromLamports(settings.priority_fee_lamports), 6);
   const body = [
     '*Settings*',
-    `Slippage: \`${settings.slippage_bps} bps\``,
-    `Priority fee: \`${formatSol(solFromLamports(settings.priority_fee_lamports), 6)} SOL\``,
+    `🌊 Slippage: \`${settings.slippage_bps} bps\` (${(settings.slippage_bps / 100).toFixed(1)}%)`,
+    `⚡ Priority fee: \`${prioritySol} SOL\``,
     '',
-    'Advanced execution controls are grouped here to keep the main experience clean.'
+    'Slippage = price movement tolerated on a swap.',
+    'Priority fee = how fast your transaction lands on Solana.'
   ];
 
   return {
@@ -889,15 +948,22 @@ async function renderAnalyticsView(identity: BotIdentity, notice?: string, promp
 async function renderPositionsView(identity: BotIdentity, notice?: string, prompt?: string): Promise<DashboardRender> {
   const positions = await getOpenPositions(identity.walletContext.userId);
   const lines = positions.length
-    ? positions.map((position) =>
-      `- \`${position.mint}\` | \`${position.status}\` | entry \`${formatSol(solFromLamports(position.entry_sol_lamports), 4)} SOL\` | TP/SL \`${position.take_profit_pct}% / ${position.stop_loss_pct}%\``
-    )
-    : ['No open positions right now.'];
+    ? positions.map((position) => {
+      const entrySol = formatSol(solFromLamports(position.entry_sol_lamports), 4);
+      const sEmoji = position.status === 'OPEN' ? '🟢' : '🟡';
+      const short = `${position.mint.slice(0, 8)}...${position.mint.slice(-6)}`;
+      return [
+        `${sEmoji} \`${short}\``,
+        `   Entry: \`${entrySol} SOL\` | TP: \`+${position.take_profit_pct}%\` | SL: \`-${position.stop_loss_pct}%\``,
+        `   Status: \`${position.status}\``
+      ].join('\n');
+    })
+    : ['No open positions right now.', '', 'Fund your wallet and enable Auto Buy to start trading.'];
 
   return {
-    text: composeDashboardText('Open Positions', ['*Position summary*', ...lines], notice, prompt),
+    text: composeDashboardText('Open Positions', ['*Active positions*', '', ...lines], notice, prompt),
     buttons: [
-      [button('🔄 Refresh', 'view:analytics_positions')],
+      [button('📊 Check Live PnL', 'act:positions_pnl'), button('🔄 Refresh', 'view:analytics_positions')],
       ...navRows('analytics_positions')
     ]
   };
@@ -906,13 +972,19 @@ async function renderPositionsView(identity: BotIdentity, notice?: string, promp
 async function renderOrdersView(identity: BotIdentity, notice?: string, prompt?: string): Promise<DashboardRender> {
   const orders = await getRecentOrders(identity.walletContext.userId);
   const lines = orders.length
-    ? orders.map((order) =>
-      `- \`${String(order.side)}\` \`${String(order.mint)}\` -> \`${String(order.status)}\`${order.txsig ? ` | sig: \`${String(order.txsig)}\`` : ''}`
-    )
+    ? orders.map((order) => {
+      const sideEmoji = String(order.side) === 'BUY' ? '🟢 BUY' : '🔴 SELL';
+      const statusEmoji = String(order.status) === 'CONFIRMED' ? '✅' : String(order.status) === 'FAILED' ? '❌' : String(order.status) === 'PROCESSING' ? '⏳' : '🕐';
+      const short = `${String(order.mint).slice(0, 8)}...${String(order.mint).slice(-6)}`;
+      const extra = order.txsig
+        ? `\n   [View tx](https://solscan.io/tx/${String(order.txsig)})`
+        : (order as any).error_message ? `\n   Error: \`${String((order as any).error_message).slice(0, 60)}\`` : '';
+      return `${statusEmoji} ${sideEmoji} \`${short}\`${extra}`;
+    })
     : ['No recent execution orders.'];
 
   return {
-    text: composeDashboardText('Recent Orders', ['*Execution history*', ...lines], notice, prompt),
+    text: composeDashboardText('Recent Orders', ['*Execution history*', '', ...lines], notice, prompt),
     buttons: [
       [button('🔄 Refresh', 'view:analytics_orders')],
       ...navRows('analytics_orders')
@@ -1012,13 +1084,16 @@ async function renderSniperView(identity: BotIdentity, notice?: string, prompt?:
     workerState: runtime.state
   });
 
+  const wE = workerStatus === 'LIVE' ? '🟢' : (workerStatus === 'PAUSED' || workerStatus === 'STOPPED') ? '🔴' : '🔵';
+  const pE = pumpfunStatus === 'LIVE' ? '🟢' : (pumpfunStatus === 'PAUSED' || pumpfunStatus === 'OFF') ? '🔴' : '🔵';
+  const aE = autoBuyState.label === 'LIVE' ? '🟢' : autoBuyState.label === 'STANDBY' ? '🟡' : autoBuyState.label === 'STARTING' ? '🔵' : '🔴';
   const body = [
     '*Sniper Status*',
-    `Launch worker: \`${workerStatus}\``,
-    `Auto Buy pipeline: \`${autoBuyState.label}\``,
-    `Auto Buy switch: \`${settings.auto_buy_enabled ? 'ON' : 'OFF'}\``,
+    `${wE} Launch worker: \`${workerStatus}\``,
+    `${aE} Auto Buy pipeline: \`${autoBuyState.label}\``,
+    `Auto Buy switch: \`${settings.auto_buy_enabled ? 'ON ✅' : 'OFF ❌'}\``,
     `Routing mode: \`${sourceModeLabel(settings.allowed_sources)}\``,
-    `Pump.fun monitor: \`${pumpfunStatus}\``,
+    `${pE} Pump.fun monitor: \`${pumpfunStatus}\``,
     `DexScreener intake: \`${routing.dexscreenerEnabled ? 'ON' : 'OFF'}\``,
     `Copy Trade intake: \`${routing.copytradeEnabled ? 'ON' : 'OFF'}\``,
     `Min score: \`${settings.min_score}\``,
@@ -1026,8 +1101,14 @@ async function renderSniperView(identity: BotIdentity, notice?: string, prompt?:
     `Last launch seen: \`${formatStatusTimestamp(runtime.lastLaunchDetectedAt, 'No launch observed yet')}\``,
     `Last sniper queue: \`${formatStatusTimestamp(runtime.lastQueuedSignalAt, 'No sniper buy queued yet')}\``,
     '',
-    autoBuyState.detail
+    `ℹ️ ${autoBuyState.detail}`
   ];
+  if (workerStatus === 'PAUSED') {
+    body.push('', '⚠️ To fix: set ENABLE_SNIPER_WORKER=true in Render env and redeploy.');
+  }
+  if (autoBuyState.label === 'STANDBY') {
+    body.push('', '✅ Bot is armed — will trade when a qualifying signal arrives.');
+  }
 
   return {
     text: composeDashboardText('Launch Sniper', body, notice, prompt),
@@ -1532,6 +1613,41 @@ async function handleCallbackQuery(update: TelegramUpdate) {
         }
         await updateSourceMode(identity, ['*'], 'Signal mode set to All Sources.', preferredMessageId);
         return;
+      case 'act:positions_pnl': {
+        const positions = await getOpenPositions(identity.walletContext.userId);
+        if (!positions.length) {
+          await showDashboard(identity, 'analytics_positions', 'No open positions to check.', preferredMessageId);
+          return;
+        }
+        const pnlLines: string[] = ['*Live PnL check*', ''];
+        for (const pos of positions) {
+          const short = `${pos.mint.slice(0, 8)}...${pos.mint.slice(-6)}`;
+          try {
+            const params = new URLSearchParams({ inputMint: pos.mint, outputMint: 'So11111111111111111111111111111111111111112', amount: pos.token_amount_raw, slippageBps: '300' });
+            const hdrs: Record<string, string> = config.jupiterApiKey ? { 'x-api-key': config.jupiterApiKey } : {};
+            const resp = await fetch(`${config.jupiterApiBaseUrl}/quote?${params.toString()}`, { headers: hdrs });
+            if (resp.ok) {
+              const data = await resp.json() as { outAmount?: string };
+              const cur = Number(data.outAmount ?? 0);
+              const ent = Number(pos.entry_sol_lamports);
+              if (cur > 0 && ent > 0) {
+                const pct = ((cur - ent) / ent) * 100;
+                pnlLines.push(`${pct >= 0 ? '🟢' : '🔴'} \`${short}\``);
+                pnlLines.push(`   Entry: \`${(ent / 1e9).toFixed(4)} SOL\` → Now: \`${(cur / 1e9).toFixed(4)} SOL\``);
+                pnlLines.push(`   PnL: \`${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%\``);
+              } else {
+                pnlLines.push(`⚪ \`${short}\` — quote returned zero`);
+              }
+            } else {
+              pnlLines.push(`⚠️ \`${short}\` — quote fetch failed`);
+            }
+          } catch {
+            pnlLines.push(`⚠️ \`${short}\` — network error`);
+          }
+        }
+        await showDashboard(identity, 'analytics_positions', pnlLines.join('\n'), preferredMessageId);
+        return;
+      }
       case 'act:withdraw_confirm':
         await confirmPendingWithdrawal(identity, undefined, preferredMessageId);
         return;

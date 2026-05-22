@@ -359,12 +359,16 @@ export class SniperService {
     }
 
     if (payload.method === 'logsNotification') {
-      await this.handleLogNotification(payload as LogNotification);
+      await this.handleLogNotification(payload as LogNotification).catch((error: any) => {
+        logger.error('sniper_log_notification_error', { message: error.message });
+      });
       return;
     }
 
     if (payload.method === 'accountNotification') {
-      await this.handleAccountNotification(payload as AccountNotification);
+      await this.handleAccountNotification(payload as AccountNotification).catch((error: any) => {
+        logger.error('sniper_account_notification_error', { message: error.message });
+      });
     }
   }
 

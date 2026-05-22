@@ -636,13 +636,14 @@ export async function processNextOrder() {
     await sendMessage(
       order.chat_id,
       [
-        '*Trade confirmed*',
-        `Mint: \`${order.mint}\``,
+        '✅ *Trade confirmed*',
+        `Token: \`${order.mint.slice(0, 8)}...${order.mint.slice(-6)}\``,
+        `Full mint: \`${order.mint}\``,
         `Side: \`${order.side}\``,
-        `Amount: \`${order.amount_lamports}\` lamports`,
-        `Slippage: \`${order.slippage_bps} bps\``,
-        `Priority: \`${order.priority_fee_lamports} lamports max\``,
-        `Signature: \`${signature}\``
+        `Spent: \`${(Number(order.amount_lamports) / LAMPORTS_PER_SOL).toFixed(6)} SOL\``,
+        `Slippage: \`${swapResponse.dynamicSlippageReport?.slippageBps ?? order.slippage_bps} bps\``,
+        `Priority fee: \`${(Number(order.priority_fee_lamports) / LAMPORTS_PER_SOL).toFixed(6)} SOL\``,
+        `[🔍 View on Solscan](https://solscan.io/tx/${signature})`
       ].join('\n')
     );
   } catch (error: any) {
@@ -656,7 +657,7 @@ export async function processNextOrder() {
     );
 
     incMetric('orders.failed');
-    await sendMessage(order.chat_id, `Trade failed for \`${order.mint}\`: ${humanizeExecutionError(error)}`);
+    await sendMessage(order.chat_id, ['❌ *Trade failed*', `Token: \`${order.mint.slice(0, 8)}...${order.mint.slice(-6)}\``, `Reason: ${humanizeExecutionError(error)}`].join('\n'));
     if (registerFailure(`order:${order.user_id}`)) {
       await sendMessage(order.chat_id, 'Alert: multiple order failures detected recently. Review settings and RPC health.');
     }
@@ -739,7 +740,12 @@ export async function processNextWithdrawal() {
 
     await sendMessage(
       request.chat_id,
-      `Withdrawal confirmed.\nAmount: \`${Number(request.amount_lamports) / LAMPORTS_PER_SOL} SOL\`\nSignature: \`${signature}\``
+      [
+        '✅ *Withdrawal confirmed*',
+        `Amount: \`${(Number(request.amount_lamports) / LAMPORTS_PER_SOL).toFixed(6)} SOL\``,
+        `To: \`${request.destination.slice(0, 8)}...${request.destination.slice(-6)}\``,
+        `[🔍 View on Solscan](https://solscan.io/tx/${signature})`
+      ].join('\n')
     );
     incMetric('withdrawals.confirmed');
   } catch (error: any) {
@@ -751,7 +757,7 @@ export async function processNextWithdrawal() {
       `,
       [request.id, error.message]
     );
-    await sendMessage(request.chat_id, `Withdrawal failed: ${humanizeExecutionError(error)}`);
+    await sendMessage(request.chat_id, ['❌ *Withdrawal failed*', `Reason: ${humanizeExecutionError(error)}`].join('\n'));
     incMetric('withdrawals.failed');
     if (registerFailure(`withdrawal:${request.user_id}`)) {
       await sendMessage(request.chat_id, 'Alert: multiple withdrawal failures detected recently.');
@@ -939,7 +945,11 @@ export async function enqueueRiskExitForMint(params: {
       await query('UPDATE positions SET status = $2, updated_at = NOW() WHERE id = $1', [position.id, 'CLOSING']);
       await sendMessage(
         position.chat_id,
-        `Fast exit queued for \`${position.mint}\` due to \`${params.reason}\`.`
+        [
+          '⚡ *Fast exit queued*',
+          `Token: \`${position.mint.slice(0, 8)}...${position.mint.slice(-6)}\``,
+          `Reason: \`${params.reason}\``
+        ].join('\n')
       );
     }
   }
@@ -983,7 +993,12 @@ export async function scanDeposits() {
         );
         await sendMessage(
           wallet.chat_id,
-          `Deposit detected: \`${(balance - previous) / LAMPORTS_PER_SOL} SOL\`\nNew balance: \`${balance / LAMPORTS_PER_SOL} SOL\``
+          [
+            '💰 *Deposit detected!*',
+            `Amount: \`+${((balance - previous) / LAMPORTS_PER_SOL).toFixed(6)} SOL\``,
+            `New balance: \`${(balance / LAMPORTS_PER_SOL).toFixed(6)} SOL\``,
+            `Wallet: \`${wallet.public_key.slice(0, 8)}...${wallet.public_key.slice(-6)}\``
+          ].join('\n')
         );
         incMetric('deposits.detected');
       }
@@ -1095,7 +1110,13 @@ export async function evaluateOpenPositions() {
       await query('UPDATE positions SET status = $2, updated_at = NOW() WHERE id = $1', [position.id, 'CLOSING']);
       await sendMessage(
         position.chat_id,
-        `Auto-exit triggered for \`${position.mint}\` at \`${pnlPct.toFixed(2)}%\`. Sell order queued.`
+        [
+          `${pnlPct >= 0 ? '🏁' : '🧯'} *Auto-exit triggered*`,
+          `Token: \`${position.mint.slice(0, 8)}...${position.mint.slice(-6)}\``,
+          `PnL: \`${pnlPct >= 0 ? '+' : ''}${pnlPct.toFixed(2)}%\``,
+          `Reason: \`${pnlPct >= 0 ? 'Take-profit hit' : 'Stop-loss hit'}\``,
+          'Sell order queued.'
+        ].join('\n')
       );
       incMetric('positions.auto_exit_triggered');
     } catch (error: any) {

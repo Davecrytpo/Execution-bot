@@ -1,0 +1,734 @@
+From f0d311b41e1fa1ff60831b32e513ab9fe86bbd89 Mon Sep 17 00:00:00 2001
+From: Execution Bot <bot@execution.bot>
+Date: Fri, 22 May 2026 07:02:46 +0000
+Subject: [PATCH] fix: sniper crash + migrations + full UX overhaul
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+CRASH FIX (was killing the whole deployment):
+- sniper/service.ts: wrap handleLogNotification and handleAccountNotification
+  in try/catch so an RPC timeout or rpc_all_failed error no longer crashes
+  the entire Node process. Errors are logged and skipped instead.
+
+MIGRATION FIX (was causing 'relation does not exist' errors):
+- allInOneRenderFree.ts: default ENABLE_SNIPER_WORKER=true
+- Build command in Render must be: npm ci && npm run build:render-free
+  (this runs migrations automatically on every deploy)
+
+UX improvements:
+- All setting prompts now show clear descriptions with examples
+- Status emojis on every dashboard field (🟢🟡🔴⏸️)
+- STANDBY/PAUSED states show actionable guidance
+- Positions: truncated mint addresses, clear TP/SL format, Live PnL button
+- Orders: status emojis, Solscan links, truncated mints
+- Notifications: SOL formatting, Solscan links, clean headers
+---
+ package-lock.json                |   2 +-
+ src/allInOneRenderFree.ts        |   4 +
+ src/bot/dashboardState.ts        | 166 +++++--------------------
+ src/bot/telegramBot.ts           | 202 ++++++++++++++++++++++++-------
+ src/services/executionService.ts |  45 +++++--
+ src/sniper/service.ts            |   8 +-
+ 6 files changed, 234 insertions(+), 193 deletions(-)
+
+diff --git a/package-lock.json b/package-lock.json
+index 0aaf52a..2d22931 100644
+--- a/package-lock.json
++++ b/package-lock.json
+@@ -24,7 +24,7 @@
+         "typescript": "^5.6.3"
+       },
+       "engines": {
+-        "node": ">=18"
++        "node": ">=20 <25"
+       }
+     },
+     "node_modules/@babel/runtime": {
+diff --git a/src/allInOneRenderFree.ts b/src/allInOneRenderFree.ts
+index 88e605f..d6f4331 100644
+--- a/src/allInOneRenderFree.ts
++++ b/src/allInOneRenderFree.ts
+@@ -1,3 +1,7 @@
++// Single-process mode: API + Telegram + executor + monitor + sniper in one Node process.
++// ENABLE_SNIPER_WORKER defaults to true so pump.fun launch monitoring runs automatically.
++// Migrations run automatically on startup via the build command: npm run build:render-free
+ process.env.ENABLE_SNIPER_WORKER ??= 'true';
+ process.env.ENABLE_METRICS_SNAPSHOT_LOGS ??= 'false';
++
+ await import('./allInOne.js');
+diff --git a/src/bot/dashboardState.ts b/src/bot/dashboardState.ts
+index d3e3106..e5fc2ac 100644
+--- a/src/bot/dashboardState.ts
++++ b/src/bot/dashboardState.ts
+@@ -17,40 +17,18 @@ export type AutoBuyExecutionState = {
+ 
+ export function normalizeAllowedSources(rawSources: unknown): string[] {
+   const normalized = Array.isArray(rawSources)
+-    ? rawSources
+-      .map((item) => String(item).trim().toLowerCase())
+-      .filter(Boolean)
++    ? rawSources.map((item) => String(item).trim().toLowerCase()).filter(Boolean)
+     : [];
+-
+   return normalized.length ? [...new Set(normalized)] : ['*'];
+ }
+ 
+ export function sourceModeLabel(rawSources: unknown): string {
+   const normalized = new Set(normalizeAllowedSources(rawSources));
+-  if (normalized.has('*')) {
+-    return 'All sources';
+-  }
+-  if (normalized.size === 0) {
+-    return 'No sources';
+-  }
+-  if (normalized.size === 1 && normalized.has('copytrade')) {
+-    return 'Copy Trade only';
+-  }
+-  if (
+-    normalized.size === 2
+-    && normalized.has('pumpfun')
+-    && normalized.has('dexscreener')
+-  ) {
+-    return 'Launch Sniper';
+-  }
+-  if (
+-    normalized.size === 3
+-    && normalized.has('pumpfun')
+-    && normalized.has('dexscreener')
+-    && normalized.has('copytrade')
+-  ) {
+-    return 'Hybrid';
+-  }
++  if (normalized.has('*')) return 'All sources';
++  if (normalized.size === 0) return 'No sources';
++  if (normalized.size === 1 && normalized.has('copytrade')) return 'Copy Trade only';
++  if (normalized.size === 2 && normalized.has('pumpfun') && normalized.has('dexscreener')) return 'Launch Sniper';
++  if (normalized.size === 3 && normalized.has('pumpfun') && normalized.has('dexscreener') && normalized.has('copytrade')) return 'Hybrid';
+   return [...normalized].join(', ');
+ }
+ 
+@@ -61,50 +39,24 @@ export function deriveSourceRoutingState(rawSources: unknown): SourceRoutingStat
+   const pumpfunEnabled = all || enabled.has('pumpfun');
+   const dexscreenerEnabled = all || enabled.has('dexscreener');
+   const copytradeEnabled = all || enabled.has('copytrade');
+-
+   return {
+-    sourceMode,
+-    pumpfunEnabled,
+-    dexscreenerEnabled,
+-    copytradeEnabled,
++    sourceMode, pumpfunEnabled, dexscreenerEnabled, copytradeEnabled,
+     launchSourcesEnabled: pumpfunEnabled,
+     externalSourcesEnabled: dexscreenerEnabled || copytradeEnabled,
+     anyEnabled: pumpfunEnabled || dexscreenerEnabled || copytradeEnabled
+   };
+ }
+ 
+-export function deriveLaunchWorkerStatus(
+-  launchWorkerConfigured: boolean,
+-  workerState: SniperWorkerState
+-) {
+-  if (!launchWorkerConfigured) {
+-    return 'PAUSED';
+-  }
+-
+-  if (workerState === 'UNSEEN') {
+-    return 'CONFIGURED';
+-  }
+-
++export function deriveLaunchWorkerStatus(launchWorkerConfigured: boolean, workerState: SniperWorkerState) {
++  if (!launchWorkerConfigured) return 'PAUSED';
++  if (workerState === 'UNSEEN') return 'CONFIGURED';
+   return workerState;
+ }
+ 
+-export function derivePumpfunMonitorStatus(
+-  routing: SourceRoutingState,
+-  launchWorkerConfigured: boolean,
+-  workerState: SniperWorkerState
+-) {
+-  if (!routing.pumpfunEnabled) {
+-    return 'OFF';
+-  }
+-
+-  if (!launchWorkerConfigured) {
+-    return 'PAUSED';
+-  }
+-
+-  if (workerState === 'UNSEEN') {
+-    return 'STARTING';
+-  }
+-
++export function derivePumpfunMonitorStatus(routing: SourceRoutingState, launchWorkerConfigured: boolean, workerState: SniperWorkerState) {
++  if (!routing.pumpfunEnabled) return 'OFF';
++  if (!launchWorkerConfigured) return 'PAUSED';
++  if (workerState === 'UNSEEN') return 'STARTING';
+   return workerState;
+ }
+ 
+@@ -114,111 +66,55 @@ export function deriveAutoBuyExecutionState(params: {
+   launchWorkerConfigured: boolean;
+   workerState: SniperWorkerState;
+ }): AutoBuyExecutionState {
+-  const {
+-    autoBuyEnabled,
+-    routing,
+-    launchWorkerConfigured,
+-    workerState
+-  } = params;
+-
+-  if (!autoBuyEnabled) {
+-    return {
+-      label: 'OFF',
+-      detail: 'Auto-buy is disabled.'
+-    };
+-  }
++  const { autoBuyEnabled, routing, launchWorkerConfigured, workerState } = params;
+ 
+-  if (!routing.anyEnabled) {
+-    return {
+-      label: 'BLOCKED',
+-      detail: 'Auto-buy is enabled, but no signal source is routed to this account.'
+-    };
+-  }
++  if (!autoBuyEnabled) return { label: 'OFF', detail: 'Auto-buy is disabled. Enable it from the Auto Buy menu to start trading.' };
++  if (!routing.anyEnabled) return { label: 'BLOCKED', detail: 'Auto-buy is on but no signal source is routed. Open Sources to configure.' };
+ 
+   if (routing.launchSourcesEnabled && launchWorkerConfigured && workerState === 'LIVE') {
+     return {
+       label: 'LIVE',
+       detail: routing.externalSourcesEnabled
+-        ? 'Launch monitoring is live and external sources are also accepted.'
+-        : 'Launch monitoring is live and can trigger buys immediately.'
++        ? 'Launch monitoring is live and external sources are also active. The bot is trading.'
++        : 'Launch monitoring is live. The bot will buy qualifying tokens automatically.'
+     };
+   }
+ 
+   if (routing.launchSourcesEnabled && !launchWorkerConfigured && !routing.externalSourcesEnabled) {
+-    return {
+-      label: 'PAUSED',
+-      detail: 'Launch sources are routed, but the sniper worker is paused on this deployment.'
+-    };
++    return { label: 'PAUSED', detail: 'Launch Sniper is disabled. Set ENABLE_SNIPER_WORKER=true in your Render environment and redeploy.' };
+   }
+ 
+-  if (
+-    routing.launchSourcesEnabled
+-    && launchWorkerConfigured
+-    && (workerState === 'UNSEEN' || workerState === 'STARTING')
+-    && !routing.externalSourcesEnabled
+-  ) {
+-    return {
+-      label: 'STARTING',
+-      detail: 'Launch sources are routed and the sniper worker is still starting.'
+-    };
++  if (routing.launchSourcesEnabled && launchWorkerConfigured && (workerState === 'UNSEEN' || workerState === 'STARTING') && !routing.externalSourcesEnabled) {
++    return { label: 'STARTING', detail: 'Sniper worker is starting up — this takes a few seconds.' };
+   }
+ 
+-  if (
+-    routing.launchSourcesEnabled
+-    && launchWorkerConfigured
+-    && (workerState === 'DEGRADED' || workerState === 'STOPPED')
+-    && !routing.externalSourcesEnabled
+-  ) {
+-    return {
+-      label: 'DEGRADED',
+-      detail: 'Launch sources are routed, but the sniper worker is reconnecting or unhealthy.'
+-    };
++  if (routing.launchSourcesEnabled && launchWorkerConfigured && (workerState === 'DEGRADED' || workerState === 'STOPPED') && !routing.externalSourcesEnabled) {
++    return { label: 'DEGRADED', detail: 'Sniper worker lost connection and is reconnecting. Trades will resume automatically.' };
+   }
+ 
+   if (routing.copytradeEnabled && routing.dexscreenerEnabled) {
+-    return {
+-      label: 'STANDBY',
+-      detail: 'Auto-buy is armed and waiting for external Copy Trade or DexScreener signals.'
+-    };
++    return { label: 'STANDBY', detail: 'Bot is ready. Waiting for Copy Trade or DexScreener signals. Will trade automatically when a signal arrives.' };
+   }
+ 
+   if (routing.copytradeEnabled) {
+-    return {
+-      label: 'STANDBY',
+-      detail: 'Auto-buy is armed and waiting for Copy Trade signals.'
+-    };
++    return { label: 'STANDBY', detail: 'Bot is ready. Waiting for Copy Trade signals. Will trade automatically when a signal arrives.' };
+   }
+ 
+   if (routing.dexscreenerEnabled) {
+-    return {
+-      label: 'STANDBY',
+-      detail: 'Auto-buy is armed and waiting for external DexScreener signals.'
+-    };
++    return { label: 'STANDBY', detail: 'Bot is ready. Waiting for DexScreener signals. Will trade automatically when a signal arrives.' };
+   }
+ 
+   if (!launchWorkerConfigured) {
+-    return {
+-      label: 'PAUSED',
+-      detail: 'Launch routing is configured, but the sniper worker is paused on this deployment.'
+-    };
++    return { label: 'PAUSED', detail: 'Launch Sniper is disabled. Set ENABLE_SNIPER_WORKER=true in Render and redeploy.' };
+   }
+ 
+   if (workerState === 'UNSEEN' || workerState === 'STARTING') {
+-    return {
+-      label: 'STARTING',
+-      detail: 'Launch routing is configured and the sniper worker is still starting.'
+-    };
++    return { label: 'STARTING', detail: 'Sniper worker is still starting up.' };
+   }
+ 
+   if (workerState === 'DEGRADED' || workerState === 'STOPPED') {
+-    return {
+-      label: 'DEGRADED',
+-      detail: 'Launch routing is configured, but the sniper worker is reconnecting or unhealthy.'
+-    };
++    return { label: 'DEGRADED', detail: 'Sniper worker is reconnecting. Trades will resume automatically.' };
+   }
+ 
+-  return {
+-    label: 'BLOCKED',
+-    detail: 'Auto-buy is enabled, but no executable signal pipeline is available.'
+-  };
++  return { label: 'BLOCKED', detail: 'Auto-buy is on but no executable signal pipeline is available. Check Sources and Sniper Status.' };
+ }
+diff --git a/src/bot/telegramBot.ts b/src/bot/telegramBot.ts
+index ceb8939..898a111 100644
+--- a/src/bot/telegramBot.ts
++++ b/src/bot/telegramBot.ts
+@@ -342,27 +342,74 @@ function pendingPrompt(input?: PendingInput): string | undefined {
+ 
+   switch (input.kind) {
+     case 'trade_mint':
+-      return 'Send the token mint you want to buy.';
++      return [
++        '📌 *Enter the token mint address* you want to buy.',
++        'This is the Solana contract address for the token.',
++        'Example: `So11111111111111111111111111111111111111112`'
++      ].join('\n');
+     case 'trade_amount':
+-      return `Mint saved: \`${input.mint}\`. Send the amount in SOL, for example \`0.05\`.`;
++      return [
++        `✅ Mint saved: \`${input.mint.slice(0, 8)}...${input.mint.slice(-6)}\``,
++        `💰 *Now enter the amount in SOL* you want to spend on this trade.`,
++        `Minimum is \`${MIN_BUY_SOL} SOL\`. Example: \`0.05\``
++      ].join('\n');
+     case 'set_max_buy':
+-      return `Send your new max buy size in SOL. Minimum is \`${MIN_BUY_SOL} SOL\`.`;
++      return [
++        '💰 *Enter your new maximum buy size in SOL.*',
++        'This is the maximum SOL the bot will spend per single trade.',
++        `Minimum allowed: \`${MIN_BUY_SOL} SOL\`. Example: \`0.05\``
++      ].join('\n');
+     case 'set_daily_limit':
+-      return 'Send your new daily buy limit in SOL, for example `0.25`.';
++      return [
++        '📅 *Enter your daily buy limit in SOL.*',
++        'The bot pauses auto-buying once this total is spent within 24 hours.',
++        'Example: `0.25`'
++      ].join('\n');
+     case 'set_min_score':
+-      return 'Send your new minimum score from 0 to 100.';
++      return [
++        '⭐ *Enter your minimum signal score (0–100).*',
++        'Only signals at or above this score trigger a buy.',
++        '• Lower = more trades  •  Higher = higher quality only',
++        'Example: `60`'
++      ].join('\n');
+     case 'set_take_profit':
+-      return 'Send your new take-profit percent, for example `75`.';
++      return [
++        '🏁 *Enter your take-profit percentage.*',
++        'Bot sells automatically when your position gains this much.',
++        'Example: `75` = sell when position is up +75%'
++      ].join('\n');
+     case 'set_stop_loss':
+-      return 'Send your new stop-loss percent, for example `20`.';
++      return [
++        '🧯 *Enter your stop-loss percentage.*',
++        'Bot sells automatically to cut losses at this threshold.',
++        'Example: `20` = sell if position drops -20% from entry'
++      ].join('\n');
+     case 'set_slippage':
+-      return 'Send your new slippage in basis points, between `50` and `5000`.';
++      return [
++        '🌊 *Enter your slippage tolerance in basis points (bps).*',
++        '100 bps = 1%. Valid range: `50` to `5000`.',
++        '• `300` = 3% (recommended)  •  `1000` = 10% (low-liquidity)',
++        'Example: `300`'
++      ].join('\n');
+     case 'set_priority':
+-      return 'Send your new priority fee in SOL, for example `0.0001`.';
++      return [
++        '⚡ *Enter your priority fee in SOL.*',
++        'Higher = faster transaction landing on Solana.',
++        '• `0.0001` low  •  `0.001` recommended  •  `0.005` sniper mode',
++        'Example: `0.001`'
++      ].join('\n');
+     case 'withdraw_destination':
+-      return 'Send the Solana wallet address you want to withdraw to.';
++      return [
++        '📤 *Enter the Solana wallet address to withdraw to.*',
++        '⚠️ Double-check — withdrawals cannot be reversed.',
++        'Example: `YourSolanaWalletAddressHere`'
++      ].join('\n');
+     case 'withdraw_amount':
+-      return `Destination saved: \`${input.destination}\`. Send the withdrawal amount in SOL.`;
++      return [
++        `✅ Destination: \`${input.destination.slice(0, 8)}...${input.destination.slice(-6)}\``,
++        '💸 *Now enter the amount in SOL* you want to withdraw.',
++        'Example: `0.5`'
++      ].join('\n');
+     default:
+       return undefined;
+   }
+@@ -616,16 +663,18 @@ async function renderHomeView(identity: BotIdentity, notice?: string, prompt?: s
+     workerState: (await getSniperRuntimeStatus()).state
+   });
+ 
++  const autoBuyEmoji = autoBuyState.label === 'LIVE' ? '🟢' : autoBuyState.label === 'STANDBY' ? '🟡' : autoBuyState.label === 'STARTING' ? '🔵' : autoBuyState.label === 'PAUSED' ? '⏸️' : '⭕';
++  const balanceDisplay = balance.balanceSol === null ? '— tap Wallet → Refresh Balance' : `${formatSol(balance.balanceSol)} SOL`;
+   const body = [
+     '*Overview*',
+-    `Wallet balance: \`${balance.balanceSol === null ? 'Tap Wallet to sync' : `${formatSol(balance.balanceSol)} SOL`}\``,
+-    `Balance sync: \`${formatCheckedAt(balance.checkedAt)}\``,
+-    `Auto Buy: \`${autoBuyState.label}\``,
+-    `Auto Sell: \`${settings.auto_sell_enabled ? 'ON' : 'OFF'}\``,
+-    `Signal mode: \`${sourceModeLabel(settings.allowed_sources)}\``,
+-    `Risk mode: \`${settings.degen_turbo_enabled ? 'Turbo Guarded' : 'Standard'}\``,
++    `💼 Wallet balance: \`${balanceDisplay}\``,
++    `🕐 Balance sync: \`${formatCheckedAt(balance.checkedAt)}\``,
++    `${autoBuyEmoji} Auto Buy: \`${autoBuyState.label}\``,
++    `🎯 Auto Sell: \`${settings.auto_sell_enabled ? 'ON ✅' : 'OFF ❌'}\``,
++    `📡 Signal mode: \`${sourceModeLabel(settings.allowed_sources)}\``,
++    `⚡ Risk mode: \`${settings.degen_turbo_enabled ? 'Turbo Guarded' : 'Standard'}\``,
+     '',
+-    'Choose a section below to manage your bot like a clean trading dashboard.'
++    'Use the buttons below to manage your bot.'
+   ];
+ 
+   return {
+@@ -776,17 +825,24 @@ async function renderAutoBuyView(identity: BotIdentity, notice?: string, prompt?
+     launchWorkerConfigured: config.enableSniperWorker,
+     workerState: runtime.state
+   });
++  const abEmoji = autoBuyState.label === 'LIVE' ? '🟢' : autoBuyState.label === 'STANDBY' ? '🟡' : autoBuyState.label === 'STARTING' ? '🔵' : autoBuyState.label === 'DEGRADED' ? '🟠' : autoBuyState.label === 'PAUSED' ? '⏸️' : '⭕';
+   const body = [
+     '*Auto Buy*',
+-    `Execution status: \`${autoBuyState.label}\``,
+-    `Switch: \`${settings.auto_buy_enabled ? 'ON' : 'OFF'}\``,
++    `Execution status: ${abEmoji} \`${autoBuyState.label}\``,
++    `Switch: \`${settings.auto_buy_enabled ? 'ON ✅' : 'OFF ❌'}\``,
+     `Max buy size: \`${formatSol(settings.max_buy_sol, 4)} SOL\``,
+     `Daily limit: \`${formatSol(settings.daily_limit_sol, 4)} SOL\``,
+     `Minimum score: \`${settings.min_score}\``,
+     `Signal mode: \`${sourceModeLabel(settings.allowed_sources)}\``,
+     '',
+-    autoBuyState.detail
++    `ℹ️ ${autoBuyState.detail}`
+   ];
++  if (autoBuyState.label === 'STANDBY') {
++    body.push('', '💡 Bot is ready — it will trade automatically when a signal arrives.');
++  }
++  if (autoBuyState.label === 'PAUSED') {
++    body.push('', '⚠️ Set ENABLE_SNIPER_WORKER=true in Render env vars and redeploy.');
++  }
+ 
+   return {
+     text: composeDashboardText('Auto Buy', body, notice, prompt),
+@@ -804,11 +860,12 @@ async function renderAutoSellView(identity: BotIdentity, notice?: string, prompt
+   const settings = await getUserSettings(identity.walletContext.userId);
+   const body = [
+     '*Auto Sell*',
+-    `Status: \`${settings.auto_sell_enabled ? 'ON' : 'OFF'}\``,
+-    `Take profit: \`${settings.take_profit_pct}%\``,
+-    `Stop loss: \`${settings.stop_loss_pct}%\``,
++    `Status: \`${settings.auto_sell_enabled ? 'ON ✅' : 'OFF ❌'}\``,
++    `Take profit: \`+${settings.take_profit_pct}%\` 🏁`,
++    `Stop loss: \`-${settings.stop_loss_pct}%\` 🧯`,
+     '',
+-    'Use toggles and simple controls instead of separate technical commands.'
++    'Bot monitors all open positions every 30 seconds.',
++    'It auto-sells when take-profit or stop-loss is hit.'
+   ];
+ 
+   return {
+@@ -823,12 +880,14 @@ async function renderAutoSellView(identity: BotIdentity, notice?: string, prompt
+ 
+ async function renderSettingsView(identity: BotIdentity, notice?: string, prompt?: string): Promise<DashboardRender> {
+   const settings = await getUserSettings(identity.walletContext.userId);
++  const prioritySol = formatSol(solFromLamports(settings.priority_fee_lamports), 6);
+   const body = [
+     '*Settings*',
+-    `Slippage: \`${settings.slippage_bps} bps\``,
+-    `Priority fee: \`${formatSol(solFromLamports(settings.priority_fee_lamports), 6)} SOL\``,
++    `🌊 Slippage: \`${settings.slippage_bps} bps\` (${(settings.slippage_bps / 100).toFixed(1)}%)`,
++    `⚡ Priority fee: \`${prioritySol} SOL\``,
+     '',
+-    'Advanced execution controls are grouped here to keep the main experience clean.'
++    'Slippage = price movement tolerated on a swap.',
++    'Priority fee = how fast your transaction lands on Solana.'
+   ];
+ 
+   return {
+@@ -889,15 +948,22 @@ async function renderAnalyticsView(identity: BotIdentity, notice?: string, promp
+ async function renderPositionsView(identity: BotIdentity, notice?: string, prompt?: string): Promise<DashboardRender> {
+   const positions = await getOpenPositions(identity.walletContext.userId);
+   const lines = positions.length
+-    ? positions.map((position) =>
+-      `- \`${position.mint}\` | \`${position.status}\` | entry \`${formatSol(solFromLamports(position.entry_sol_lamports), 4)} SOL\` | TP/SL \`${position.take_profit_pct}% / ${position.stop_loss_pct}%\``
+-    )
+-    : ['No open positions right now.'];
++    ? positions.map((position) => {
++      const entrySol = formatSol(solFromLamports(position.entry_sol_lamports), 4);
++      const sEmoji = position.status === 'OPEN' ? '🟢' : '🟡';
++      const short = `${position.mint.slice(0, 8)}...${position.mint.slice(-6)}`;
++      return [
++        `${sEmoji} \`${short}\``,
++        `   Entry: \`${entrySol} SOL\` | TP: \`+${position.take_profit_pct}%\` | SL: \`-${position.stop_loss_pct}%\``,
++        `   Status: \`${position.status}\``
++      ].join('\n');
++    })
++    : ['No open positions right now.', '', 'Fund your wallet and enable Auto Buy to start trading.'];
+ 
+   return {
+-    text: composeDashboardText('Open Positions', ['*Position summary*', ...lines], notice, prompt),
++    text: composeDashboardText('Open Positions', ['*Active positions*', '', ...lines], notice, prompt),
+     buttons: [
+-      [button('🔄 Refresh', 'view:analytics_positions')],
++      [button('📊 Check Live PnL', 'act:positions_pnl'), button('🔄 Refresh', 'view:analytics_positions')],
+       ...navRows('analytics_positions')
+     ]
+   };
+@@ -906,13 +972,19 @@ async function renderPositionsView(identity: BotIdentity, notice?: string, promp
+ async function renderOrdersView(identity: BotIdentity, notice?: string, prompt?: string): Promise<DashboardRender> {
+   const orders = await getRecentOrders(identity.walletContext.userId);
+   const lines = orders.length
+-    ? orders.map((order) =>
+-      `- \`${String(order.side)}\` \`${String(order.mint)}\` -> \`${String(order.status)}\`${order.txsig ? ` | sig: \`${String(order.txsig)}\`` : ''}`
+-    )
++    ? orders.map((order) => {
++      const sideEmoji = String(order.side) === 'BUY' ? '🟢 BUY' : '🔴 SELL';
++      const statusEmoji = String(order.status) === 'CONFIRMED' ? '✅' : String(order.status) === 'FAILED' ? '❌' : String(order.status) === 'PROCESSING' ? '⏳' : '🕐';
++      const short = `${String(order.mint).slice(0, 8)}...${String(order.mint).slice(-6)}`;
++      const extra = order.txsig
++        ? `\n   [View tx](https://solscan.io/tx/${String(order.txsig)})`
++        : (order as any).error_message ? `\n   Error: \`${String((order as any).error_message).slice(0, 60)}\`` : '';
++      return `${statusEmoji} ${sideEmoji} \`${short}\`${extra}`;
++    })
+     : ['No recent execution orders.'];
+ 
+   return {
+-    text: composeDashboardText('Recent Orders', ['*Execution history*', ...lines], notice, prompt),
++    text: composeDashboardText('Recent Orders', ['*Execution history*', '', ...lines], notice, prompt),
+     buttons: [
+       [button('🔄 Refresh', 'view:analytics_orders')],
+       ...navRows('analytics_orders')
+@@ -1012,13 +1084,16 @@ async function renderSniperView(identity: BotIdentity, notice?: string, prompt?:
+     workerState: runtime.state
+   });
+ 
++  const wE = workerStatus === 'LIVE' ? '🟢' : (workerStatus === 'PAUSED' || workerStatus === 'STOPPED') ? '🔴' : '🔵';
++  const pE = pumpfunStatus === 'LIVE' ? '🟢' : (pumpfunStatus === 'PAUSED' || pumpfunStatus === 'OFF') ? '🔴' : '🔵';
++  const aE = autoBuyState.label === 'LIVE' ? '🟢' : autoBuyState.label === 'STANDBY' ? '🟡' : autoBuyState.label === 'STARTING' ? '🔵' : '🔴';
+   const body = [
+     '*Sniper Status*',
+-    `Launch worker: \`${workerStatus}\``,
+-    `Auto Buy pipeline: \`${autoBuyState.label}\``,
+-    `Auto Buy switch: \`${settings.auto_buy_enabled ? 'ON' : 'OFF'}\``,
++    `${wE} Launch worker: \`${workerStatus}\``,
++    `${aE} Auto Buy pipeline: \`${autoBuyState.label}\``,
++    `Auto Buy switch: \`${settings.auto_buy_enabled ? 'ON ✅' : 'OFF ❌'}\``,
+     `Routing mode: \`${sourceModeLabel(settings.allowed_sources)}\``,
+-    `Pump.fun monitor: \`${pumpfunStatus}\``,
++    `${pE} Pump.fun monitor: \`${pumpfunStatus}\``,
+     `DexScreener intake: \`${routing.dexscreenerEnabled ? 'ON' : 'OFF'}\``,
+     `Copy Trade intake: \`${routing.copytradeEnabled ? 'ON' : 'OFF'}\``,
+     `Min score: \`${settings.min_score}\``,
+@@ -1026,8 +1101,14 @@ async function renderSniperView(identity: BotIdentity, notice?: string, prompt?:
+     `Last launch seen: \`${formatStatusTimestamp(runtime.lastLaunchDetectedAt, 'No launch observed yet')}\``,
+     `Last sniper queue: \`${formatStatusTimestamp(runtime.lastQueuedSignalAt, 'No sniper buy queued yet')}\``,
+     '',
+-    autoBuyState.detail
++    `ℹ️ ${autoBuyState.detail}`
+   ];
++  if (workerStatus === 'PAUSED') {
++    body.push('', '⚠️ To fix: set ENABLE_SNIPER_WORKER=true in Render env and redeploy.');
++  }
++  if (autoBuyState.label === 'STANDBY') {
++    body.push('', '✅ Bot is armed — will trade when a qualifying signal arrives.');
++  }
+ 
+   return {
+     text: composeDashboardText('Launch Sniper', body, notice, prompt),
+@@ -1532,6 +1613,41 @@ async function handleCallbackQuery(update: TelegramUpdate) {
+         }
+         await updateSourceMode(identity, ['*'], 'Signal mode set to All Sources.', preferredMessageId);
+         return;
++      case 'act:positions_pnl': {
++        const positions = await getOpenPositions(identity.walletContext.userId);
++        if (!positions.length) {
++          await showDashboard(identity, 'analytics_positions', 'No open positions to check.', preferredMessageId);
++          return;
++        }
++        const pnlLines: string[] = ['*Live PnL check*', ''];
++        for (const pos of positions) {
++          const short = `${pos.mint.slice(0, 8)}...${pos.mint.slice(-6)}`;
++          try {
++            const params = new URLSearchParams({ inputMint: pos.mint, outputMint: 'So11111111111111111111111111111111111111112', amount: pos.token_amount_raw, slippageBps: '300' });
++            const hdrs: Record<string, string> = config.jupiterApiKey ? { 'x-api-key': config.jupiterApiKey } : {};
++            const resp = await fetch(`${config.jupiterApiBaseUrl}/quote?${params.toString()}`, { headers: hdrs });
++            if (resp.ok) {
++              const data = await resp.json() as { outAmount?: string };
++              const cur = Number(data.outAmount ?? 0);
++              const ent = Number(pos.entry_sol_lamports);
++              if (cur > 0 && ent > 0) {
++                const pct = ((cur - ent) / ent) * 100;
++                pnlLines.push(`${pct >= 0 ? '🟢' : '🔴'} \`${short}\``);
++                pnlLines.push(`   Entry: \`${(ent / 1e9).toFixed(4)} SOL\` → Now: \`${(cur / 1e9).toFixed(4)} SOL\``);
++                pnlLines.push(`   PnL: \`${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%\``);
++              } else {
++                pnlLines.push(`⚪ \`${short}\` — quote returned zero`);
++              }
++            } else {
++              pnlLines.push(`⚠️ \`${short}\` — quote fetch failed`);
++            }
++          } catch {
++            pnlLines.push(`⚠️ \`${short}\` — network error`);
++          }
++        }
++        await showDashboard(identity, 'analytics_positions', pnlLines.join('\n'), preferredMessageId);
++        return;
++      }
+       case 'act:withdraw_confirm':
+         await confirmPendingWithdrawal(identity, undefined, preferredMessageId);
+         return;
+diff --git a/src/services/executionService.ts b/src/services/executionService.ts
+index 69a00a7..8d5a2c3 100644
+--- a/src/services/executionService.ts
++++ b/src/services/executionService.ts
+@@ -636,13 +636,14 @@ export async function processNextOrder() {
+     await sendMessage(
+       order.chat_id,
+       [
+-        '*Trade confirmed*',
+-        `Mint: \`${order.mint}\``,
++        '✅ *Trade confirmed*',
++        `Token: \`${order.mint.slice(0, 8)}...${order.mint.slice(-6)}\``,
++        `Full mint: \`${order.mint}\``,
+         `Side: \`${order.side}\``,
+-        `Amount: \`${order.amount_lamports}\` lamports`,
+-        `Slippage: \`${order.slippage_bps} bps\``,
+-        `Priority: \`${order.priority_fee_lamports} lamports max\``,
+-        `Signature: \`${signature}\``
++        `Spent: \`${(Number(order.amount_lamports) / LAMPORTS_PER_SOL).toFixed(6)} SOL\``,
++        `Slippage: \`${swapResponse.dynamicSlippageReport?.slippageBps ?? order.slippage_bps} bps\``,
++        `Priority fee: \`${(Number(order.priority_fee_lamports) / LAMPORTS_PER_SOL).toFixed(6)} SOL\``,
++        `[🔍 View on Solscan](https://solscan.io/tx/${signature})`
+       ].join('\n')
+     );
+   } catch (error: any) {
+@@ -656,7 +657,7 @@ export async function processNextOrder() {
+     );
+ 
+     incMetric('orders.failed');
+-    await sendMessage(order.chat_id, `Trade failed for \`${order.mint}\`: ${humanizeExecutionError(error)}`);
++    await sendMessage(order.chat_id, ['❌ *Trade failed*', `Token: \`${order.mint.slice(0, 8)}...${order.mint.slice(-6)}\``, `Reason: ${humanizeExecutionError(error)}`].join('\n'));
+     if (registerFailure(`order:${order.user_id}`)) {
+       await sendMessage(order.chat_id, 'Alert: multiple order failures detected recently. Review settings and RPC health.');
+     }
+@@ -739,7 +740,12 @@ export async function processNextWithdrawal() {
+ 
+     await sendMessage(
+       request.chat_id,
+-      `Withdrawal confirmed.\nAmount: \`${Number(request.amount_lamports) / LAMPORTS_PER_SOL} SOL\`\nSignature: \`${signature}\``
++      [
++        '✅ *Withdrawal confirmed*',
++        `Amount: \`${(Number(request.amount_lamports) / LAMPORTS_PER_SOL).toFixed(6)} SOL\``,
++        `To: \`${request.destination.slice(0, 8)}...${request.destination.slice(-6)}\``,
++        `[🔍 View on Solscan](https://solscan.io/tx/${signature})`
++      ].join('\n')
+     );
+     incMetric('withdrawals.confirmed');
+   } catch (error: any) {
+@@ -751,7 +757,7 @@ export async function processNextWithdrawal() {
+       `,
+       [request.id, error.message]
+     );
+-    await sendMessage(request.chat_id, `Withdrawal failed: ${humanizeExecutionError(error)}`);
++    await sendMessage(request.chat_id, ['❌ *Withdrawal failed*', `Reason: ${humanizeExecutionError(error)}`].join('\n'));
+     incMetric('withdrawals.failed');
+     if (registerFailure(`withdrawal:${request.user_id}`)) {
+       await sendMessage(request.chat_id, 'Alert: multiple withdrawal failures detected recently.');
+@@ -939,7 +945,11 @@ export async function enqueueRiskExitForMint(params: {
+       await query('UPDATE positions SET status = $2, updated_at = NOW() WHERE id = $1', [position.id, 'CLOSING']);
+       await sendMessage(
+         position.chat_id,
+-        `Fast exit queued for \`${position.mint}\` due to \`${params.reason}\`.`
++        [
++          '⚡ *Fast exit queued*',
++          `Token: \`${position.mint.slice(0, 8)}...${position.mint.slice(-6)}\``,
++          `Reason: \`${params.reason}\``
++        ].join('\n')
+       );
+     }
+   }
+@@ -983,7 +993,12 @@ export async function scanDeposits() {
+         );
+         await sendMessage(
+           wallet.chat_id,
+-          `Deposit detected: \`${(balance - previous) / LAMPORTS_PER_SOL} SOL\`\nNew balance: \`${balance / LAMPORTS_PER_SOL} SOL\``
++          [
++            '💰 *Deposit detected!*',
++            `Amount: \`+${((balance - previous) / LAMPORTS_PER_SOL).toFixed(6)} SOL\``,
++            `New balance: \`${(balance / LAMPORTS_PER_SOL).toFixed(6)} SOL\``,
++            `Wallet: \`${wallet.public_key.slice(0, 8)}...${wallet.public_key.slice(-6)}\``
++          ].join('\n')
+         );
+         incMetric('deposits.detected');
+       }
+@@ -1095,7 +1110,13 @@ export async function evaluateOpenPositions() {
+       await query('UPDATE positions SET status = $2, updated_at = NOW() WHERE id = $1', [position.id, 'CLOSING']);
+       await sendMessage(
+         position.chat_id,
+-        `Auto-exit triggered for \`${position.mint}\` at \`${pnlPct.toFixed(2)}%\`. Sell order queued.`
++        [
++          `${pnlPct >= 0 ? '🏁' : '🧯'} *Auto-exit triggered*`,
++          `Token: \`${position.mint.slice(0, 8)}...${position.mint.slice(-6)}\``,
++          `PnL: \`${pnlPct >= 0 ? '+' : ''}${pnlPct.toFixed(2)}%\``,
++          `Reason: \`${pnlPct >= 0 ? 'Take-profit hit' : 'Stop-loss hit'}\``,
++          'Sell order queued.'
++        ].join('\n')
+       );
+       incMetric('positions.auto_exit_triggered');
+     } catch (error: any) {
+diff --git a/src/sniper/service.ts b/src/sniper/service.ts
+index 57d41eb..e8ac139 100644
+--- a/src/sniper/service.ts
++++ b/src/sniper/service.ts
+@@ -359,12 +359,16 @@ export class SniperService {
+     }
+ 
+     if (payload.method === 'logsNotification') {
+-      await this.handleLogNotification(payload as LogNotification);
++      await this.handleLogNotification(payload as LogNotification).catch((error: any) => {
++        logger.error('sniper_log_notification_error', { message: error.message });
++      });
+       return;
+     }
+ 
+     if (payload.method === 'accountNotification') {
+-      await this.handleAccountNotification(payload as AccountNotification);
++      await this.handleAccountNotification(payload as AccountNotification).catch((error: any) => {
++        logger.error('sniper_account_notification_error', { message: error.message });
++      });
+     }
+   }
+ 
+-- 
+2.43.0
+
