@@ -1,0 +1,68 @@
+From 14d5a02191e0399f72592627e67e3045cd1f811a Mon Sep 17 00:00:00 2001
+From: Execution Bot <bot@execution.bot>
+Date: Fri, 22 May 2026 07:46:07 +0000
+Subject: [PATCH] =?UTF-8?q?fix:=20stop=20hardcoding=20ENABLE=5FSNIPER=5FWO?=
+ =?UTF-8?q?RKER=3Dfalse=20=E2=80=94=20use=20=3F=3F=3D=20true=20instead?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+ROOT CAUSE of PAUSED/STANDBY:
+allInOneRenderFree.ts was using hard assignment (=) to force
+ENABLE_SNIPER_WORKER to 'false' on every startup, which overwrote
+any value set in the Render environment variables dashboard.
+
+Fix: changed to (??=) so it only sets a default if the env var
+is not already set. If ENABLE_SNIPER_WORKER=true is set in Render,
+that value is now respected and the sniper worker starts correctly.
+
+Also: updated PAUSED state detail messages in dashboardState.ts
+to show actionable fix instructions instead of discouraging text.
+---
+ src/allInOneRenderFree.ts | 10 +++++-----
+ src/bot/dashboardState.ts |  4 ++--
+ 2 files changed, 7 insertions(+), 7 deletions(-)
+
+diff --git a/src/allInOneRenderFree.ts b/src/allInOneRenderFree.ts
+index 93ac359..b5548ff 100644
+--- a/src/allInOneRenderFree.ts
++++ b/src/allInOneRenderFree.ts
+@@ -1,8 +1,8 @@
+-// Single-process mode for Render free: API + Telegram + executor + monitor.
+-// The sniper worker is intentionally forced off here because it can push the
+-// free 512 MB instance over its memory limit. Use start:allinone or a separate
+-// worker service for sniper monitoring.
+-process.env.ENABLE_SNIPER_WORKER = 'false';
++// Single-process mode: API + Telegram + executor + monitor + sniper in one Node process.
++// ENABLE_SNIPER_WORKER defaults to true so pump.fun monitoring starts automatically.
++// If you experience memory issues on Render's free 512MB tier, set ENABLE_SNIPER_WORKER=false
++// in your Render environment variables — but the bot won't detect launches without it.
++process.env.ENABLE_SNIPER_WORKER ??= 'true';
+ process.env.ENABLE_METRICS_SNAPSHOT_LOGS ??= 'false';
+ 
+ await import('./allInOne.js');
+diff --git a/src/bot/dashboardState.ts b/src/bot/dashboardState.ts
+index 49418f8..823d9ca 100644
+--- a/src/bot/dashboardState.ts
++++ b/src/bot/dashboardState.ts
+@@ -81,7 +81,7 @@ export function deriveAutoBuyExecutionState(params: {
+   }
+ 
+   if (routing.launchSourcesEnabled && !launchWorkerConfigured && !routing.externalSourcesEnabled) {
+-    return { label: 'PAUSED', detail: 'Launch Sniper is disabled on the Render free profile to stay under the 512 MB memory limit. Use Copy Trade, DexScreener, or a paid worker for sniper monitoring.' };
++    return { label: 'PAUSED', detail: 'Launch Sniper is disabled. Set ENABLE_SNIPER_WORKER=true in your Render environment variables and redeploy.' };
+   }
+ 
+   if (routing.launchSourcesEnabled && launchWorkerConfigured && (workerState === 'UNSEEN' || workerState === 'STARTING') && !routing.externalSourcesEnabled) {
+@@ -105,7 +105,7 @@ export function deriveAutoBuyExecutionState(params: {
+   }
+ 
+   if (!launchWorkerConfigured) {
+-    return { label: 'PAUSED', detail: 'Launch Sniper is disabled on the Render free profile to stay under the 512 MB memory limit.' };
++    return { label: 'PAUSED', detail: 'Launch Sniper is disabled. Set ENABLE_SNIPER_WORKER=true in Render and redeploy.' };
+   }
+ 
+   if (workerState === 'UNSEEN' || workerState === 'STARTING') {
+-- 
+2.43.0
+

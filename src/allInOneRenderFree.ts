@@ -1,8 +1,8 @@
-// Single-process mode for Render free: API + Telegram + executor + monitor.
-// The sniper worker is intentionally forced off here because it can push the
-// free 512 MB instance over its memory limit. Use start:allinone or a separate
-// worker service for sniper monitoring.
-process.env.ENABLE_SNIPER_WORKER = 'false';
+// Single-process mode: API + Telegram + executor + monitor + sniper in one Node process.
+// ENABLE_SNIPER_WORKER defaults to true so pump.fun monitoring starts automatically.
+// If you experience memory issues on Render's free 512MB tier, set ENABLE_SNIPER_WORKER=false
+// in your Render environment variables — but the bot won't detect launches without it.
+process.env.ENABLE_SNIPER_WORKER ??= 'true';
 process.env.ENABLE_METRICS_SNAPSHOT_LOGS ??= 'false';
 
 await import('./allInOne.js');
