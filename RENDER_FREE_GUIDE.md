@@ -3,30 +3,39 @@
 This guide deploys the bot in the cheapest workable hosted shape:
 
 - `Neon` for PostgreSQL
-- one `Render` free web service
-- `UptimeRobot` hitting `/health` every 5 minutes
+- two `Render` free web services
+- `UptimeRobot` hitting each `/health` endpoint every 5 minutes
 
 This is a hobby or test setup, not a production deployment.
 
+Do not deploy the root `render.yaml` Blueprint for the free setup. That Blueprint intentionally uses paid `starter` services. Follow the manual web-service steps below instead.
+
 ## How This Free Setup Works
 
-Render free does not provide free background workers, so the bot cannot run as five separate services there for `$0`.
+This setup avoids paid Render background workers by running the long-lived processes as free web services with health endpoints.
 
-Instead, this repo includes a single-process mode:
+The main free service runs:
 
 - HTTP API
 - Telegram bot
 - execution worker
 - monitor worker
-- sniper worker
 
-All of them run inside one Node process with:
+It starts with:
 
 ```text
 npm run start:render-free
 ```
 
-In the free profile, the API, Telegram bot, executor, and monitor run by default. The sniper worker is paused by default because it is the heaviest component and is the most likely to push a free Render instance over the `512Mi` memory limit.
+The sniper free service runs only the sniper worker and a small health server:
+
+```text
+npm run start:sniper-web
+```
+
+Both services use the same `DATABASE_URL`. The sniper detects launches and writes queued signals to the database. The main service's executor worker reads those queued orders and executes them.
+
+In the main free profile, the sniper worker is paused by default because it is the heaviest component and is the most likely to push a free Render instance over the `512Mi` memory limit.
 On Render, Telegram delivery now switches to webhook mode automatically by using Render's `RENDER_EXTERNAL_URL`.
 
 Migration should run in the Render build command, not in the start command. This helps the service pass Render health checks more reliably.
@@ -52,7 +61,7 @@ Recommended:
 - use a long random `API_SHARED_SECRET`
 - use a long random `CUSTODY_MASTER_KEY`
 
-## Create The Render Service
+## Create The Main Render Service
 
 1. Open the Render dashboard.
 2. Click `New` -> `Web Service`.
@@ -78,6 +87,28 @@ npm run start:render-free
 ```text
 /health
 ```
+
+## Create The Sniper Render Service
+
+Create a second Render `Web Service` from the same repo and branch.
+
+Use these settings:
+
+- `Runtime`: `Node`
+- `Instance Type`: `Free`
+- `Build Command`: `npm ci && npm run build`
+- `Start Command`: `npm run start:sniper-web`
+- `Health Check Path`: `/health`
+
+Use the same environment variables as the main service, especially the same `DATABASE_URL`, `API_SHARED_SECRET`, RPC URLs, and sniper settings.
+
+For this sniper service, set:
+
+- `ENABLE_TELEGRAM_BOT=false`
+- `ENABLE_EXECUTOR_WORKER=false`
+- `ENABLE_MONITOR_WORKER=false`
+- `ENABLE_SNIPER_WORKER=true`
+- `ENABLE_METRICS_SNAPSHOT_LOGS=false`
 
 ## Environment Variables
 
@@ -139,18 +170,24 @@ You do not need `DATABASE_SSL` for a normal Neon URI that already includes `sslm
 
 ## Set Up UptimeRobot
 
-Use UptimeRobot only to keep the free Render service warm.
+Use UptimeRobot only to keep the free Render services warm.
 
 1. Create an account at `https://uptimerobot.com/pricing`.
 2. Create a new `HTTP(s)` monitor.
-3. Set the URL to:
+3. Set the URL to the main service:
 
 ```text
 https://<your-render-service>.onrender.com/health
 ```
 
-4. Leave the interval at `5 minutes`.
-5. Save the monitor.
+4. Create another monitor for the sniper service:
+
+```text
+https://<your-sniper-render-service>.onrender.com/health
+```
+
+5. Leave both intervals at `5 minutes`.
+6. Save the monitors.
 
 Important:
 
@@ -200,6 +237,23 @@ Expected:
 - monitor loop is logging metrics
 - no repeated out-of-memory restarts
 
+5. Open the sniper service health endpoint:
+
+```text
+GET https://<your-sniper-render-service>.onrender.com/health
+```
+
+Expected:
+
+```json
+{
+  "ok": true,
+  "service": "sniper"
+}
+```
+
+Then check the sniper logs for `sniper_ws_open`.
+
 ## Limits You Need To Accept
 
 - Render free spins down after 15 minutes with no inbound traffic.
@@ -218,7 +272,8 @@ Because of those limits, this setup is fine for testing and light personal use, 
 Check:
 
 - `Build Command` is `npm ci && npm run build:render-free`
-- `Start Command` is `npm run start:render-free`
+- main `Start Command` is `npm run start:render-free`
+- sniper `Start Command` is `npm run start:sniper-web`
 - all required environment variables are present
 
 ### Health Check Fails

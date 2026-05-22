@@ -15,7 +15,8 @@
     "start:bot": "node dist/bot/telegramBot.js",
     "start:worker": "node dist/workers/executor.js",
     "start:monitor": "node dist/workers/monitor.js",
-    "start:sniper": "node dist/workers/sniper.js",
+    "start:sniper": "node --max-old-space-size=256 dist/workers/sniper.js",
+    "start:sniper-web": "node --max-old-space-size=256 dist/sniperRenderFree.js",
     "migrate": "node dist/scripts/migrate.js",
     "test": "node dist/tests/runTests.js",
     "test:smoke": "node dist/tests/smokeDryRun.js"
