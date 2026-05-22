@@ -1,7 +1,8 @@
-// Single-process mode: API + Telegram + executor + monitor + sniper in one Node process.
-// ENABLE_SNIPER_WORKER defaults to true so pump.fun launch monitoring runs automatically.
-// Migrations run automatically on startup via the build command: npm run build:render-free
-process.env.ENABLE_SNIPER_WORKER ??= 'true';
+// Single-process mode for Render free: API + Telegram + executor + monitor.
+// The sniper worker is intentionally forced off here because it can push the
+// free 512 MB instance over its memory limit. Use start:allinone or a separate
+// worker service for sniper monitoring.
+process.env.ENABLE_SNIPER_WORKER = 'false';
 process.env.ENABLE_METRICS_SNAPSHOT_LOGS ??= 'false';
 
 await import('./allInOne.js');

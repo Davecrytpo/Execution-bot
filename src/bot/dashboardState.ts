@@ -81,7 +81,7 @@ export function deriveAutoBuyExecutionState(params: {
   }
 
   if (routing.launchSourcesEnabled && !launchWorkerConfigured && !routing.externalSourcesEnabled) {
-    return { label: 'PAUSED', detail: 'Launch Sniper is disabled. Set ENABLE_SNIPER_WORKER=true in your Render environment and redeploy.' };
+    return { label: 'PAUSED', detail: 'Launch Sniper is disabled on the Render free profile to stay under the 512 MB memory limit. Use Copy Trade, DexScreener, or a paid worker for sniper monitoring.' };
   }
 
   if (routing.launchSourcesEnabled && launchWorkerConfigured && (workerState === 'UNSEEN' || workerState === 'STARTING') && !routing.externalSourcesEnabled) {
@@ -105,7 +105,7 @@ export function deriveAutoBuyExecutionState(params: {
   }
 
   if (!launchWorkerConfigured) {
-    return { label: 'PAUSED', detail: 'Launch Sniper is disabled. Set ENABLE_SNIPER_WORKER=true in Render and redeploy.' };
+    return { label: 'PAUSED', detail: 'Launch Sniper is disabled on the Render free profile to stay under the 512 MB memory limit.' };
   }
 
   if (workerState === 'UNSEEN' || workerState === 'STARTING') {

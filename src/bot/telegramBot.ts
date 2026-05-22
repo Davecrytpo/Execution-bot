@@ -841,7 +841,7 @@ async function renderAutoBuyView(identity: BotIdentity, notice?: string, prompt?
     body.push('', '💡 Bot is ready — it will trade automatically when a signal arrives.');
   }
   if (autoBuyState.label === 'PAUSED') {
-    body.push('', '⚠️ Set ENABLE_SNIPER_WORKER=true in Render env vars and redeploy.');
+    body.push('', 'Launch Sniper is paused on Render free to stay under the 512 MB memory limit.');
   }
 
   return {
@@ -1104,7 +1104,7 @@ async function renderSniperView(identity: BotIdentity, notice?: string, prompt?:
     `ℹ️ ${autoBuyState.detail}`
   ];
   if (workerStatus === 'PAUSED') {
-    body.push('', '⚠️ To fix: set ENABLE_SNIPER_WORKER=true in Render env and redeploy.');
+    body.push('', 'Launch Sniper needs a paid worker or the non-free all-in-one start command.');
   }
   if (autoBuyState.label === 'STANDBY') {
     body.push('', '✅ Bot is armed — will trade when a qualifying signal arrives.');
