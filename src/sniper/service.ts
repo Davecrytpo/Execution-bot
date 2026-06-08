@@ -517,27 +517,33 @@ export class SniperService {
   }
 
   private async fetchLaunchSnapshot(mint: string, creatorWallet: string | null, bondingCurve: string) {
-    const [curveInfo, mintInfo, creatorAccounts, largestAccounts, walletReputation, dexMetadata] = await Promise.all([
-      rpcPool.withConnection((connection) => connection.getAccountInfo(new PublicKey(bondingCurve), 'confirmed')),
-      rpcPool.withConnection((connection) => connection.getParsedAccountInfo(new PublicKey(mint), 'confirmed')),
-      creatorWallet
-        ? rpcPool.withConnection((connection) => connection.getParsedTokenAccountsByOwner(
-          new PublicKey(creatorWallet),
-          { mint: new PublicKey(mint) },
-          'confirmed'
-        ))
-        : Promise.resolve(null),
-      rpcPool.withConnection((connection) => connection.getTokenLargestAccounts(new PublicKey(mint), 'confirmed')),
-      creatorWallet ? getWalletReputation(creatorWallet) : Promise.resolve({
+    const curveInfo = await rpcPool.withConnection(
+      (connection) => connection.getAccountInfo(new PublicKey(bondingCurve), 'confirmed')
+    );
+    const mintInfo = await rpcPool.withConnection(
+      (connection) => connection.getParsedAccountInfo(new PublicKey(mint), 'confirmed')
+    );
+    const creatorAccounts = creatorWallet
+      ? await rpcPool.withConnection((connection) => connection.getParsedTokenAccountsByOwner(
+        new PublicKey(creatorWallet),
+        { mint: new PublicKey(mint) },
+        'confirmed'
+      ))
+      : null;
+    const largestAccounts = await rpcPool.withConnection(
+      (connection) => connection.getTokenLargestAccounts(new PublicKey(mint), 'confirmed')
+    );
+    const walletReputation = creatorWallet
+      ? await getWalletReputation(creatorWallet)
+      : {
         wallet: '',
         label: 'unknown' as const,
         riskScore: 0,
         launchesSeen: 0,
         suspiciousEvents: 0,
         rugsSeen: 0
-      }),
-      this.fetchDexScreenerMetadata(mint)
-    ]);
+      };
+    const dexMetadata = await this.fetchDexScreenerMetadata(mint);
 
     if (!curveInfo?.data) {
       throw new Error('bonding_curve_account_missing');
@@ -566,25 +572,24 @@ export class SniperService {
       return sum + BigInt(parsed.parsed?.info?.tokenAmount?.amount ?? '0');
     }, 0n) ?? 0n;
 
-    const holderOwners = await Promise.all(
-      largestAccounts.value.slice(0, 10).map(async (entry) => {
-        const parsed = await rpcPool.withConnection((connection) =>
-          connection.getParsedAccountInfo(entry.address, 'confirmed')
-        );
-        const info = parsed.value?.data as {
-          parsed?: {
-            info?: {
-              owner?: string;
-              tokenAmount?: { amount?: string };
-            };
+    const holderOwners: Array<{ owner: string; amountRaw: bigint }> = [];
+    for (const entry of largestAccounts.value.slice(0, 5)) {
+      const parsed = await rpcPool.withConnection((connection) =>
+        connection.getParsedAccountInfo(entry.address, 'confirmed')
+      );
+      const info = parsed.value?.data as {
+        parsed?: {
+          info?: {
+            owner?: string;
+            tokenAmount?: { amount?: string };
           };
-        } | undefined;
-        return {
-          owner: info?.parsed?.info?.owner ?? '',
-          amountRaw: BigInt(entry.amount)
         };
-      })
-    );
+      } | undefined;
+      holderOwners.push({
+        owner: info?.parsed?.info?.owner ?? '',
+        amountRaw: BigInt(entry.amount)
+      });
+    }
 
     const topHolderHoldingsRaw = holderOwners
       .filter((holder) => holder.owner && holder.owner !== bondingCurve)
