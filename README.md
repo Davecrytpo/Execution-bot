@@ -1,3 +1,12 @@
+---
+title: Execution Bot
+colorFrom: green
+colorTo: blue
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 # Solana Telegram Execution Bot
 
 Standalone custodial Telegram execution bot for Solana with a realtime pump.fun sniper worker.
@@ -47,6 +56,7 @@ Free hosting note:
 - For that setup, run migration in the Render build command and use `npm run start:render-free` only for process startup.
 - Use UptimeRobot to ping `/health` every 5 minutes so Render does not idle-spin the service down.
 - Do not use `/robots.txt` for wakeups. Render serves that path directly while a free service is spun down.
+- Hugging Face Spaces Docker deployment is supported with `Dockerfile`; see `HUGGINGFACE_DEPLOYMENT.md`.
 
 Realtime sniper flow:
 
