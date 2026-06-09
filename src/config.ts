@@ -52,6 +52,10 @@ function deriveAlchemyWsUrl(rpcUrl: string) {
 }
 
 function deriveTelegramWebhookUrl() {
+  if (!toBoolean(process.env.TELEGRAM_USE_WEBHOOK, true)) {
+    return '';
+  }
+
   const explicit = optional(process.env.TELEGRAM_WEBHOOK_URL);
   if (explicit) {
     return explicit;
