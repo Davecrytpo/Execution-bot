@@ -493,6 +493,10 @@ export class SniperService {
         this.processedSignatures.set(next.signature, Date.now());
         this.lastLogProcessedAt = Date.now();
 
+        logger.info('sniper_log_processing', {
+          signature: next.signature,
+          eventKind: next.eventKind
+        });
         await this.handleLogNotification(next.payload, next.eventKind).catch((error: any) => {
           logger.error('sniper_log_notification_error', { message: error.message });
         });
@@ -612,13 +616,27 @@ export class SniperService {
     if (eventKind === 'create') {
       const instructionMint = await this.resolveCreateInstructionMint(tx);
       if (instructionMint) {
+        logger.info('sniper_create_mint_resolved', {
+          mint: instructionMint,
+          method: 'instruction'
+        });
         return instructionMint;
       }
     }
 
     const direct = extractMintFromParsedTransaction(tx, eventKind);
     if (direct && (eventKind !== 'create' || await this.isTokenMint(direct))) {
+      logger.info('sniper_create_mint_resolved', {
+        mint: direct,
+        method: 'token_balances'
+      });
       return direct;
+    }
+    if (eventKind === 'create' && direct) {
+      logger.info('sniper_create_mint_candidate_rejected', {
+        mint: direct,
+        method: 'token_balances'
+      });
     }
 
     const keys = tx.transaction.message.accountKeys.map((key) => new PublicKey(key.pubkey));
@@ -636,8 +654,18 @@ export class SniperService {
 
     for (const candidate of candidates) {
       if (await this.isTokenMint(candidate)) {
+        logger.info('sniper_create_mint_resolved', {
+          mint: candidate,
+          method: 'account_scan'
+        });
         return candidate;
       }
+    }
+
+    if (eventKind === 'create') {
+      logger.info('sniper_create_mint_candidates_rejected', {
+        candidates
+      });
     }
 
     return null;
@@ -659,6 +687,11 @@ export class SniperService {
       const candidate = accounts[0]?.toBase58();
       if (candidate && await this.isTokenMint(candidate)) {
         return candidate;
+      }
+      if (candidate) {
+        logger.info('sniper_create_instruction_candidate_rejected', {
+          candidate
+        });
       }
     }
 
