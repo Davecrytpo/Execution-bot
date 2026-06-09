@@ -66,11 +66,15 @@ export function decideLaunch(snapshot: LaunchSnapshot): LaunchDecision {
   if (snapshot.walletRiskLabel === 'high_risk') {
     hardRejects.push('creator_wallet_high_risk');
   }
-  if (snapshot.stats.buys === 0) {
+  if (config.sniperRequireEarlyBuyInterest && snapshot.stats.buys === 0) {
     hardRejects.push('no_early_buy_interest');
+  } else if (snapshot.stats.buys === 0) {
+    score -= 8;
   }
-  if (snapshot.stats.uniqueBuyerRatio < config.sniperMinUniqueBuyerRatio) {
+  if (config.sniperRequireWalletDiversity && snapshot.stats.uniqueBuyerRatio < config.sniperMinUniqueBuyerRatio) {
     hardRejects.push('wallet_diversity_too_low');
+  } else if (snapshot.stats.uniqueBuyerRatio < config.sniperMinUniqueBuyerRatio) {
+    score -= 8;
   }
   if (snapshot.stats.buyBurstCount > config.sniperMaxBuyBurstCount) {
     hardRejects.push('launch_overcrowded');
@@ -146,10 +150,14 @@ export function decideLaunch(snapshot: LaunchSnapshot): LaunchDecision {
     `wallet_risk=${snapshot.walletRiskLabel}`
   );
 
+  const canRiskBuy = config.sniperAllowRiskyBuys
+    && score >= config.sniperRiskyBuyMinScore
+    && !hardRejects.includes('creator_wallet_high_risk');
+
   return {
-    action: hardRejects.length ? 'SKIP' : 'BUY',
+    action: hardRejects.length && !canRiskBuy ? 'SKIP' : 'BUY',
     score,
-    hardRejects,
+    hardRejects: canRiskBuy ? [] : hardRejects,
     reasons,
     priorityLevel,
     recommendedSlippageBps,
