@@ -46,6 +46,7 @@ function clamp(value: number, min: number, max: number) {
 export function decideLaunch(snapshot: LaunchSnapshot): LaunchDecision {
   const hardRejects: string[] = [];
   const reasons: string[] = [];
+  let score = 50;
 
   if (snapshot.liquiditySol < config.sniperMinInitialLiquiditySol) {
     hardRejects.push('liquidity_below_floor');
@@ -57,7 +58,7 @@ export function decideLaunch(snapshot: LaunchSnapshot): LaunchDecision {
     hardRejects.push('creator_wallet_concentration_too_high');
   }
   if (!snapshot.mintAuthorityRevoked) {
-    hardRejects.push('mint_authority_not_revoked');
+    score -= 15;
   }
   if (snapshot.topHolderPct > config.sniperMaxTopHolderPct) {
     hardRejects.push('top_holder_concentration_too_high');
@@ -75,7 +76,7 @@ export function decideLaunch(snapshot: LaunchSnapshot): LaunchDecision {
     hardRejects.push('launch_overcrowded');
   }
   if (snapshot.stats.suspiciousWallets > config.sniperMaxSuspiciousWallets) {
-    hardRejects.push('suspicious_wallet_cluster_detected');
+    score -= 20;
   }
   if (snapshot.stats.whaleExitCount > 0 && snapshot.stats.sellVolumeSol >= snapshot.stats.buyVolumeSol) {
     hardRejects.push('early_whale_exit_pressure');
@@ -84,7 +85,6 @@ export function decideLaunch(snapshot: LaunchSnapshot): LaunchDecision {
     hardRejects.push('sell_pressure_overwhelming');
   }
 
-  let score = 50;
   score += clamp(snapshot.liquiditySol * 1.5, 0, 20);
   score += clamp(snapshot.stats.uniqueBuyers * 2, 0, 15);
   score += clamp(snapshot.stats.buyAcceleration * 8, -8, 12);
