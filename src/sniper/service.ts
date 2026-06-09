@@ -519,6 +519,10 @@ export class SniperService {
 
     const tx = await this.fetchParsedTransaction(signature);
     if (!tx) {
+      logger.info('sniper_parsed_transaction_unavailable', {
+        signature,
+        eventKind
+      });
       return;
     }
 
@@ -600,16 +604,38 @@ export class SniperService {
   }
 
   private async fetchParsedTransaction(signature: string) {
-    return rpcPool.withConnection(
-      (connection) => connection.getParsedTransaction(signature, {
-        commitment: 'confirmed',
-        maxSupportedTransactionVersion: 0
-      }),
-      {
-        preferPrimary: false,
-        timeoutMs: config.rpcRequestTimeoutMs
+    const attempts = 5;
+    for (let attempt = 1; attempt <= attempts; attempt += 1) {
+      const tx = await rpcPool.withConnection(
+        (connection) => connection.getParsedTransaction(signature, {
+          commitment: 'confirmed',
+          maxSupportedTransactionVersion: 0
+        }),
+        {
+          preferPrimary: false,
+          timeoutMs: config.rpcRequestTimeoutMs
+        }
+      );
+
+      if (tx) {
+        if (attempt > 1) {
+          logger.info('sniper_parsed_transaction_loaded', {
+            signature,
+            attempt
+          });
+        }
+        return tx;
       }
-    );
+
+      logger.info('sniper_parsed_transaction_retry', {
+        signature,
+        attempt,
+        attempts
+      });
+      await wait(1500);
+    }
+
+    return null;
   }
 
   private async resolveMint(tx: ParsedTransactionWithMeta, eventKind: PumpEventKind) {
