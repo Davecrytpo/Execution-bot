@@ -184,6 +184,15 @@ export async function enqueueSignal(body: {
     `,
     [side, body.source, body.score ?? null]
   );
+  logger.info('signal_eligible_users', {
+    signalId,
+    signalKey,
+    mint: body.mint,
+    source: body.source,
+    side,
+    score: body.score ?? null,
+    eligibleUsers: eligibleUsers.rowCount
+  });
 
   let queued = 0;
   for (const user of eligibleUsers.rows) {
@@ -200,10 +209,20 @@ export async function enqueueSignal(body: {
     );
 
     if (amountLamports <= 0) {
+      logger.info('signal_user_skipped', {
+        signalId,
+        userId: user.id,
+        reason: 'non_positive_amount'
+      });
       continue;
     }
 
     if (side === 'BUY' && !(await canUserOpenNewTrade(user.id, amountLamports))) {
+      logger.info('signal_user_skipped', {
+        signalId,
+        userId: user.id,
+        reason: 'daily_limit_or_position_limit_reached'
+      });
       continue;
     }
 
@@ -212,6 +231,11 @@ export async function enqueueSignal(body: {
       && user.degen_turbo_enabled
       && !(await passesDegenTurboChecks(user.id, body.source, body.mint))
     ) {
+      logger.info('signal_user_skipped', {
+        signalId,
+        userId: user.id,
+        reason: 'degen_turbo_checks_failed'
+      });
       continue;
     }
 
@@ -256,6 +280,14 @@ export async function enqueueSignal(body: {
     'UPDATE execution_signals SET status = $1, updated_at = NOW() WHERE id = $2',
     [queued > 0 ? 'QUEUED' : 'NO_MATCH', signalId]
   );
+  logger.info('signal_enqueue_result', {
+    signalId,
+    signalKey,
+    mint: body.mint,
+    source: body.source,
+    side,
+    queued
+  });
 
   return { signalId, signalKey, queued };
 }

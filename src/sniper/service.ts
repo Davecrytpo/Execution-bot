@@ -826,6 +826,15 @@ export class SniperService {
     this.subscribeCurve(params.mint, bondingCurve);
     incMetric('sniper.launch_detected');
     markSniperLaunchDetected(params.mint);
+    logger.info('sniper_launch_detected', {
+      mint: params.mint,
+      signature: params.signature,
+      creatorWallet,
+      liquiditySol: metrics.liquiditySol,
+      curveProgressPct: metrics.curveProgressPct,
+      creatorHoldingsPct: metrics.creatorHoldingsPct,
+      topHolderPct: metrics.topHolderPct
+    });
 
     if (creatorWallet) {
       await touchWalletReputation({
@@ -991,6 +1000,20 @@ export class SniperService {
 
     state.decisionMade = true;
     incMetric(`sniper.decision.${decision.action.toLowerCase()}`);
+    logger.info('sniper_decision', {
+      mint,
+      action: decision.action,
+      score: decision.score,
+      hardRejects: decision.hardRejects,
+      reasons: decision.reasons,
+      stats: {
+        buys: stats.buys,
+        sells: stats.sells,
+        uniqueBuyers: stats.uniqueBuyers,
+        buyVolumeSol: stats.buyVolumeSol,
+        sellVolumeSol: stats.sellVolumeSol
+      }
+    });
 
     if (decision.action === 'BUY') {
       const result = await enqueueSignal({
@@ -1023,6 +1046,12 @@ export class SniperService {
           recommendedPriorityFeeLamports: decision.recommendedPriorityFeeLamports,
           dexScreener: state.dexMetadata
         }
+      });
+      logger.info('sniper_signal_result', {
+        mint,
+        signalId: result.signalId,
+        queued: result.queued,
+        score: decision.score
       });
 
       await upsertSniperToken({
