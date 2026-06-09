@@ -3,6 +3,7 @@ import { config } from '../config.js';
 import { query } from '../lib/db.js';
 import { getMetricsSnapshot } from '../lib/metrics.js';
 import { rpcPool } from '../lib/rpcPool.js';
+import { getWebhookInfo } from '../lib/telegram.js';
 import { getSniperRuntimeStatus } from '../sniper/runtime.js';
 
 export const adminRouter = Router();
@@ -45,6 +46,25 @@ adminRouter.get('/metrics', (_req, res) => {
   return res.json({
     metrics: getMetricsSnapshot()
   });
+});
+
+adminRouter.get('/telegram', async (_req, res) => {
+  try {
+    const webhook = await getWebhookInfo();
+    return res.json({
+      webhook: {
+        url: webhook.url,
+        pendingUpdateCount: webhook.pending_update_count,
+        lastErrorDate: webhook.last_error_date,
+        lastErrorMessage: webhook.last_error_message,
+        lastSynchronizationErrorDate: webhook.last_synchronization_error_date,
+        maxConnections: webhook.max_connections,
+        allowedUpdates: webhook.allowed_updates
+      }
+    });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message ?? 'telegram_status_failed' });
+  }
 });
 
 adminRouter.get('/sniper', async (_req, res) => {

@@ -7,6 +7,7 @@ import {
   deleteMessage,
   deleteWebhook,
   editMessageText,
+  getWebhookInfo,
   getUpdates,
   sendMessage,
   sendPhoto,
@@ -2096,6 +2097,19 @@ export async function startTelegramBot(signal?: AbortSignal) {
         await setWebhook(config.telegramWebhookUrl, config.telegramWebhookSecret || undefined);
         markTelegramLive();
         logger.info('telegram_webhook_enabled', { url: config.telegramWebhookUrl });
+        await getWebhookInfo()
+          .then((info) => {
+            logger.info('telegram_webhook_info', {
+              url: info.url,
+              pendingUpdateCount: info.pending_update_count,
+              lastErrorDate: info.last_error_date,
+              lastErrorMessage: info.last_error_message,
+              allowedUpdates: info.allowed_updates
+            });
+          })
+          .catch((error: any) => {
+            logger.error('telegram_webhook_info_failed', { message: error.message });
+          });
         break;
       } catch (error: any) {
         markTelegramDegraded(error.message);

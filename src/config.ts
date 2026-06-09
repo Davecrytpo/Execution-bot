@@ -62,6 +62,19 @@ function deriveTelegramWebhookUrl() {
     return `${renderExternalUrl}/api/telegram/webhook`;
   }
 
+  const spaceHost = optional(process.env.SPACE_HOST);
+  if (spaceHost) {
+    return `https://${spaceHost}/api/telegram/webhook`;
+  }
+
+  const spaceId = optional(process.env.SPACE_ID);
+  if (spaceId.includes('/')) {
+    const [owner, space] = spaceId.split('/');
+    if (owner && space) {
+      return `https://${owner}-${space}.hf.space/api/telegram/webhook`.toLowerCase();
+    }
+  }
+
   return '';
 }
 

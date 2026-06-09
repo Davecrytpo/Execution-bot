@@ -3,6 +3,7 @@ import { config } from '../config.js';
 
 type TelegramMethod =
   | 'getUpdates'
+  | 'getWebhookInfo'
   | 'sendMessage'
   | 'sendPhoto'
   | 'editMessageText'
@@ -82,6 +83,18 @@ export type TelegramUpdate = {
   };
 };
 
+export type TelegramWebhookInfo = {
+  url: string;
+  has_custom_certificate: boolean;
+  pending_update_count: number;
+  ip_address?: string;
+  last_error_date?: number;
+  last_error_message?: string;
+  last_synchronization_error_date?: number;
+  max_connections?: number;
+  allowed_updates?: string[];
+};
+
 async function parseTelegramResponse<T>(response: Response) {
   const raw = await response.text();
   let data: { ok?: boolean; result?: T; description?: string } = {};
@@ -129,6 +142,10 @@ export async function getUpdates(offset: number): Promise<TelegramUpdate[]> {
     timeout: 25,
     allowed_updates: ['message', 'callback_query']
   });
+}
+
+export async function getWebhookInfo(): Promise<TelegramWebhookInfo> {
+  return telegramRequest('getWebhookInfo', {});
 }
 
 export async function sendMessage(
