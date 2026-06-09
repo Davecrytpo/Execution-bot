@@ -12,6 +12,7 @@ import {
   sendPhoto,
   setWebhook,
   setCommands,
+  TelegramApiError,
   type InlineKeyboardButton,
   type TelegramUpdate
 } from '../lib/telegram.js';
@@ -53,6 +54,62 @@ const TURBO_TOKEN_COOLDOWN_MINUTES = 10;
 const TURBO_DUPLICATE_WINDOW_SECONDS = 90;
 const LAMPORTS_PER_SOL = 1_000_000_000;
 const START_BANNER_PATH = join(process.cwd(), 'assets', 'telegram-logo.png');
+
+type TelegramBotRuntimeStatus = {
+  state: 'UNSEEN' | 'STARTING' | 'LIVE' | 'DEGRADED' | 'STOPPED';
+  mode: 'webhook' | 'polling' | null;
+  startedAt: string | null;
+  lastReadyAt: string | null;
+  lastUpdateAt: string | null;
+  lastPollAt: string | null;
+  lastError: string | null;
+};
+
+const telegramRuntimeStatus: TelegramBotRuntimeStatus = {
+  state: 'UNSEEN',
+  mode: null,
+  startedAt: null,
+  lastReadyAt: null,
+  lastUpdateAt: null,
+  lastPollAt: null,
+  lastError: null
+};
+
+function nowIso() {
+  return new Date().toISOString();
+}
+
+function wait(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function markTelegramStarting(mode: TelegramBotRuntimeStatus['mode']) {
+  telegramRuntimeStatus.state = 'STARTING';
+  telegramRuntimeStatus.mode = mode;
+  telegramRuntimeStatus.startedAt ??= nowIso();
+}
+
+function markTelegramLive() {
+  telegramRuntimeStatus.state = 'LIVE';
+  telegramRuntimeStatus.lastReadyAt = nowIso();
+  telegramRuntimeStatus.lastError = null;
+}
+
+function markTelegramDegraded(message: string) {
+  telegramRuntimeStatus.state = telegramRuntimeStatus.startedAt ? 'DEGRADED' : 'STARTING';
+  telegramRuntimeStatus.lastError = message;
+}
+
+function markTelegramStopped(message?: string) {
+  telegramRuntimeStatus.state = 'STOPPED';
+  if (message) {
+    telegramRuntimeStatus.lastError = message;
+  }
+}
+
+export function getTelegramBotRuntimeStatus(): TelegramBotRuntimeStatus {
+  return { ...telegramRuntimeStatus };
+}
 
 function isLaunchWorkerAvailable(runtime: SniperRuntimeStatus) {
   return config.enableSniperWorker || runtime.state !== 'UNSEEN' || Boolean(runtime.startedAt);
@@ -1991,6 +2048,11 @@ async function handleExportKeyCommand(identity: BotIdentity) {
 }
 
 export async function handleIncomingUpdate(update: TelegramUpdate) {
+  telegramRuntimeStatus.lastUpdateAt = nowIso();
+  if (telegramRuntimeStatus.state === 'STARTING' || telegramRuntimeStatus.state === 'DEGRADED') {
+    markTelegramLive();
+  }
+
   if (isCallbackUpdate(update)) {
     return handleCallbackQuery(update);
   }
@@ -2020,14 +2082,32 @@ export async function handleIncomingUpdate(update: TelegramUpdate) {
 }
 
 export async function startTelegramBot(signal?: AbortSignal) {
-  await setCommands();
+  const mode = config.telegramWebhookUrl ? 'webhook' : 'polling';
+  markTelegramStarting(mode);
+
+  await setCommands().catch((error: any) => {
+    markTelegramDegraded(error.message);
+    logger.error('telegram_set_commands_failed', { message: error.message });
+  });
+
   if (config.telegramWebhookUrl) {
-    await setWebhook(config.telegramWebhookUrl, config.telegramWebhookSecret || undefined);
-    logger.info('telegram_webhook_enabled', { url: config.telegramWebhookUrl });
+    while (!signal?.aborted) {
+      try {
+        await setWebhook(config.telegramWebhookUrl, config.telegramWebhookSecret || undefined);
+        markTelegramLive();
+        logger.info('telegram_webhook_enabled', { url: config.telegramWebhookUrl });
+        break;
+      } catch (error: any) {
+        markTelegramDegraded(error.message);
+        logger.error('telegram_webhook_setup_failed', { message: error.message });
+        await wait(10_000);
+      }
+    }
 
     while (!signal?.aborted) {
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      await wait(1000);
     }
+    markTelegramStopped();
     return;
   }
 
@@ -2039,6 +2119,8 @@ export async function startTelegramBot(signal?: AbortSignal) {
   while (!signal?.aborted) {
     try {
       const updates = await getUpdates(offset);
+      telegramRuntimeStatus.lastPollAt = nowIso();
+      markTelegramLive();
       for (const update of updates) {
         if (signal?.aborted) {
           break;
@@ -2065,17 +2147,21 @@ export async function startTelegramBot(signal?: AbortSignal) {
       if (signal?.aborted) {
         break;
       }
-      if (error.message === 'telegram_http_409') {
+      if (error instanceof TelegramApiError && error.status === 409) {
+        markTelegramDegraded(error.message);
         logger.info('telegram_poll_conflict', {
           message: 'Another bot polling session is active for this token. Backing off before retrying.'
         });
-        await new Promise((resolve) => setTimeout(resolve, 10000));
+        await wait(10000);
         continue;
       }
+      markTelegramDegraded(error.message);
       logger.error('telegram_poll_error', { message: error.message });
-      await new Promise((resolve) => setTimeout(resolve, 3000));
+      await wait(3000);
     }
   }
+
+  markTelegramStopped();
 }
 
 const isDirectRun = process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1];

@@ -52,7 +52,10 @@ function buildEndpoints(): RpcEndpoint[] {
     { name: 'backup', url: config.alchemyRpcUrl, rank: 2 }
   ]).map((endpoint) => ({
     ...endpoint,
-    connection: new Connection(endpoint.url, 'confirmed')
+    connection: new Connection(endpoint.url, {
+      commitment: 'confirmed',
+      disableRetryOnRateLimit: true
+    })
   }));
 }
 
@@ -81,7 +84,10 @@ export class RpcPool {
   private readonly endpointErrorLogUntil = new Map<string, number>();
 
   getPrimaryConnection() {
-    return this.endpoints[0]?.connection ?? new Connection(config.solanaRpc, 'confirmed');
+    return this.endpoints[0]?.connection ?? new Connection(config.solanaRpc, {
+      commitment: 'confirmed',
+      disableRetryOnRateLimit: true
+    });
   }
 
   private getEndpointRank(name: RpcEndpointName) {
@@ -211,7 +217,11 @@ export class RpcPool {
       return this.endpoints;
     }
 
-    const candidateEndpoints = available.length ? available : reachable;
+    if (!available.length) {
+      return [];
+    }
+
+    const candidateEndpoints = available;
 
     if (preferPrimary) {
       const primaryHealth = healthByName.get('primary');
@@ -255,6 +265,10 @@ export class RpcPool {
   ): Promise<T> {
     const ordered = await this.getOrderedEndpoints(options.preferPrimary ?? true);
     const errors: string[] = [];
+
+    if (!ordered.length) {
+      throw new Error('rpc_no_available_endpoints');
+    }
 
     for (const endpoint of ordered) {
       try {

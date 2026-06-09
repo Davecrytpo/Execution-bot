@@ -7,6 +7,15 @@ import { startExecutorWorker } from './workers/executor.js';
 import { startMonitorWorker } from './workers/monitor.js';
 import { startSniperWorker } from './workers/sniper.js';
 
+process.on('unhandledRejection', (reason: unknown) => {
+  const message = reason instanceof Error ? reason.message : String(reason);
+  logger.error('process_unhandled_rejection', { message });
+});
+
+process.on('uncaughtException', (error: Error) => {
+  logger.error('process_uncaught_exception', { message: error.message });
+});
+
 async function main() {
   const abortController = new AbortController();
   const server = startApi();

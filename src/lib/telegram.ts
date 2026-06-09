@@ -12,6 +12,16 @@ type TelegramMethod =
   | 'deleteWebhook'
   | 'setWebhook';
 
+export class TelegramApiError extends Error {
+  status: number;
+
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = 'TelegramApiError';
+    this.status = status;
+  }
+}
+
 export type TelegramUser = {
   id: number;
   username?: string;
@@ -85,7 +95,7 @@ async function parseTelegramResponse<T>(response: Response) {
   }
 
   if (!response.ok || !data.ok) {
-    throw new Error(data.description ?? `telegram_http_${response.status}`);
+    throw new TelegramApiError(response.status, data.description ?? `telegram_http_${response.status}`);
   }
 
   return data.result as T;
@@ -96,13 +106,21 @@ async function telegramRequest<T>(method: TelegramMethod, body: Record<string, u
     throw new Error('TELEGRAM_BOT_TOKEN is required');
   }
 
-  const response = await fetch(`https://api.telegram.org/bot${config.telegramBotToken}/${method}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body)
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(new Error(`telegram_timeout:${method}`)), 30_000);
 
-  return parseTelegramResponse<T>(response);
+  try {
+    const response = await fetch(`https://api.telegram.org/bot${config.telegramBotToken}/${method}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: controller.signal
+    });
+
+    return parseTelegramResponse<T>(response);
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 export async function getUpdates(offset: number): Promise<TelegramUpdate[]> {
@@ -148,10 +166,19 @@ export async function sendPhoto(
     form.set('reply_markup', JSON.stringify(options.replyMarkup));
   }
 
-  const response = await fetch(`https://api.telegram.org/bot${config.telegramBotToken}/sendPhoto`, {
-    method: 'POST',
-    body: form
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(new Error('telegram_timeout:sendPhoto')), 30_000);
+
+  let response: Response;
+  try {
+    response = await fetch(`https://api.telegram.org/bot${config.telegramBotToken}/sendPhoto`, {
+      method: 'POST',
+      body: form,
+      signal: controller.signal
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
 
   return parseTelegramResponse<TelegramMessage>(response);
 }

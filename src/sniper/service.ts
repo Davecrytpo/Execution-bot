@@ -99,6 +99,14 @@ type LogNotification = {
   };
 };
 
+type QueuedLogNotification = {
+  payload: LogNotification;
+  signature: string;
+  eventKind: PumpEventKind;
+};
+
+type TradeEventKind = 'buy' | 'sell' | 'migrate';
+
 type AccountNotification = {
   params?: {
     result?: {
@@ -122,6 +130,10 @@ function normalizeSymbol(mint: string, symbol?: string) {
   return symbol?.trim() || mint.slice(0, 6);
 }
 
+function isTradeEventKind(eventKind: PumpEventKind): eventKind is TradeEventKind {
+  return eventKind === 'buy' || eventKind === 'sell' || eventKind === 'migrate';
+}
+
 export class SniperService {
   private readonly websocketUrls = [config.heliusWsUrl, config.alchemyWsUrl].filter(Boolean);
   private ws: WebSocket | null = null;
@@ -135,6 +147,11 @@ export class SniperService {
   private readonly accountSubscriptions = new Map<number, { mint: string; bondingCurve: string }>();
   private readonly launchStates = new Map<string, RuntimeLaunchState>();
   private readonly processedSignatures = new Map<string, number>();
+  private readonly queuedSignatures = new Set<string>();
+  private readonly logQueue: QueuedLogNotification[] = [];
+  private logQueueRunning = false;
+  private lastLogProcessedAt = 0;
+  private lastCreateQueuedAt = 0;
   private globalState: PumpGlobalState | null = null;
   private logsSubscriptionId: number | null = null;
   private stopping = false;
@@ -359,9 +376,7 @@ export class SniperService {
     }
 
     if (payload.method === 'logsNotification') {
-      await this.handleLogNotification(payload as LogNotification).catch((error: any) => {
-        logger.error('sniper_log_notification_error', { message: error.message });
-      });
+      this.enqueueLogNotification(payload as LogNotification);
       return;
     }
 
@@ -372,22 +387,103 @@ export class SniperService {
     }
   }
 
-  private async handleLogNotification(payload: LogNotification) {
+  private enqueueLogNotification(payload: LogNotification) {
     const signature = payload.params?.result?.value?.signature;
     const logs = payload.params?.result?.value?.logs ?? [];
-    const slot = payload.params?.result?.context?.slot ?? 0;
 
     if (!signature || !logs.length) {
       return;
     }
 
-    if (this.processedSignatures.has(signature)) {
+    if (this.processedSignatures.has(signature) || this.queuedSignatures.has(signature)) {
       return;
     }
-    this.processedSignatures.set(signature, Date.now());
 
     const eventKind = getPumpEventKindFromLogs(logs);
     if (eventKind === 'unknown') {
+      return;
+    }
+
+    if (eventKind === 'create') {
+      const now = Date.now();
+      if (now - this.lastCreateQueuedAt < config.sniperCreateProcessIntervalMs) {
+        incMetric('sniper.create_dropped');
+        return;
+      }
+      this.lastCreateQueuedAt = now;
+    }
+
+    if (eventKind !== 'create' && this.launchStates.size === 0) {
+      return;
+    }
+
+    if (this.logQueue.length >= config.sniperLogQueueMax) {
+      if (eventKind !== 'create') {
+        incMetric('sniper.log_dropped');
+        return;
+      }
+
+      const removableIndex = this.logQueue.findIndex((entry) => entry.eventKind !== 'create');
+      if (removableIndex >= 0) {
+        const [removed] = this.logQueue.splice(removableIndex, 1);
+        this.queuedSignatures.delete(removed.signature);
+      } else {
+        incMetric('sniper.log_dropped');
+        return;
+      }
+    }
+
+    this.logQueue.push({ payload, signature, eventKind });
+    this.queuedSignatures.add(signature);
+    this.processLogQueue();
+  }
+
+  private processLogQueue() {
+    if (this.logQueueRunning) {
+      return;
+    }
+
+    this.logQueueRunning = true;
+    void this.drainLogQueue();
+  }
+
+  private async drainLogQueue() {
+    try {
+      while (!this.stopping && this.logQueue.length) {
+        const waitMs = Math.max(
+          0,
+          config.sniperLogProcessIntervalMs - (Date.now() - this.lastLogProcessedAt)
+        );
+        if (waitMs > 0) {
+          await wait(waitMs);
+        }
+
+        const next = this.logQueue.shift();
+        if (!next) {
+          continue;
+        }
+
+        this.queuedSignatures.delete(next.signature);
+        this.processedSignatures.set(next.signature, Date.now());
+        this.lastLogProcessedAt = Date.now();
+
+        await this.handleLogNotification(next.payload, next.eventKind).catch((error: any) => {
+          logger.error('sniper_log_notification_error', { message: error.message });
+        });
+      }
+    } finally {
+      this.logQueueRunning = false;
+      if (this.logQueue.length && !this.stopping) {
+        this.processLogQueue();
+      }
+    }
+  }
+
+  private async handleLogNotification(payload: LogNotification, eventKind: PumpEventKind) {
+    const signature = payload.params?.result?.value?.signature;
+    const slot = payload.params?.result?.context?.slot ?? 0;
+
+    if (!signature) {
       return;
     }
 
@@ -412,6 +508,10 @@ export class SniperService {
         tx,
         actorWallet
       });
+      return;
+    }
+
+    if (!isTradeEventKind(eventKind)) {
       return;
     }
 
@@ -755,7 +855,12 @@ export class SniperService {
     });
 
     state.decisionTimer = setTimeout(() => {
-      void this.finalizeDecision(params.mint);
+      void this.finalizeDecision(params.mint).catch((error: any) => {
+        logger.error('sniper_decision_finalize_failed', {
+          mint: params.mint,
+          message: error.message
+        });
+      });
     }, config.sniperWarmupMs);
   }
 
@@ -765,7 +870,7 @@ export class SniperService {
     slot: number;
     tx: ParsedTransactionWithMeta;
     actorWallet: string | null;
-    eventKind: 'buy' | 'sell' | 'migrate';
+    eventKind: TradeEventKind;
   }) {
     const state = this.launchStates.get(params.mint);
     if (!state) {
@@ -837,7 +942,21 @@ export class SniperService {
       return;
     }
 
-    const refreshed = await this.fetchLaunchSnapshot(mint, state.creatorWallet, state.bondingCurve);
+    const refreshed = await this.fetchLaunchSnapshot(mint, state.creatorWallet, state.bondingCurve)
+      .catch(async (error: any) => {
+        logger.error('sniper_launch_snapshot_refresh_failed', {
+          mint,
+          message: error.message
+        });
+        await updateSniperTokenStatus(mint, 'DETECTED', {
+          decisionPending: true,
+          reason: error.message
+        }).catch(() => undefined);
+        return null;
+      });
+    if (!refreshed) {
+      return;
+    }
     state.curveState = refreshed.curveState;
     state.mintDecimals = refreshed.decimals;
     state.mintAuthorityRevoked = refreshed.mintAuthorityRevoked;
