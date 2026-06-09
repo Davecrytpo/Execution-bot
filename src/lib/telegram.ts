@@ -4,6 +4,7 @@ import { config } from '../config.js';
 type TelegramMethod =
   | 'getUpdates'
   | 'getWebhookInfo'
+  | 'getMe'
   | 'sendMessage'
   | 'sendPhoto'
   | 'editMessageText'
@@ -20,6 +21,19 @@ export class TelegramApiError extends Error {
     super(message);
     this.name = 'TelegramApiError';
     this.status = status;
+  }
+}
+
+export class TelegramNetworkError extends Error {
+  method: TelegramMethod;
+  causeMessage: string;
+
+  constructor(method: TelegramMethod, cause: unknown) {
+    const causeMessage = cause instanceof Error ? cause.message : String(cause);
+    super(`telegram_network_failed:${method}:${causeMessage}`);
+    this.name = 'TelegramNetworkError';
+    this.method = method;
+    this.causeMessage = causeMessage;
   }
 }
 
@@ -95,6 +109,13 @@ export type TelegramWebhookInfo = {
   allowed_updates?: string[];
 };
 
+export type TelegramBotInfo = {
+  id: number;
+  is_bot: boolean;
+  first_name: string;
+  username?: string;
+};
+
 async function parseTelegramResponse<T>(response: Response) {
   const raw = await response.text();
   let data: { ok?: boolean; result?: T; description?: string } = {};
@@ -131,6 +152,11 @@ async function telegramRequest<T>(method: TelegramMethod, body: Record<string, u
     });
 
     return parseTelegramResponse<T>(response);
+  } catch (error: unknown) {
+    if (error instanceof TelegramApiError) {
+      throw error;
+    }
+    throw new TelegramNetworkError(method, error);
   } finally {
     clearTimeout(timeout);
   }
@@ -146,6 +172,10 @@ export async function getUpdates(offset: number): Promise<TelegramUpdate[]> {
 
 export async function getWebhookInfo(): Promise<TelegramWebhookInfo> {
   return telegramRequest('getWebhookInfo', {});
+}
+
+export async function getMe(): Promise<TelegramBotInfo> {
+  return telegramRequest('getMe', {});
 }
 
 export async function sendMessage(

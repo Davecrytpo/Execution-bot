@@ -7,6 +7,7 @@ import {
   deleteMessage,
   deleteWebhook,
   editMessageText,
+  getMe,
   getWebhookInfo,
   getUpdates,
   sendMessage,
@@ -2086,10 +2087,33 @@ export async function startTelegramBot(signal?: AbortSignal) {
   const mode = config.telegramWebhookUrl ? 'webhook' : 'polling';
   markTelegramStarting(mode);
 
-  await setCommands().catch((error: any) => {
-    markTelegramDegraded(error.message);
-    logger.error('telegram_set_commands_failed', { message: error.message });
-  });
+  let telegramApiReachable = true;
+  await getMe()
+    .then((bot) => {
+      logger.info('telegram_get_me_ok', {
+        id: bot.id,
+        username: bot.username,
+        firstName: bot.first_name
+      });
+    })
+    .catch((error: any) => {
+      telegramApiReachable = false;
+      markTelegramDegraded(error.message);
+      logger.error('telegram_get_me_failed', {
+        message: error.message,
+        cause: error.causeMessage
+      });
+    });
+
+  if (telegramApiReachable) {
+    await setCommands().catch((error: any) => {
+      markTelegramDegraded(error.message);
+      logger.error('telegram_set_commands_failed', {
+        message: error.message,
+        cause: error.causeMessage
+      });
+    });
+  }
 
   if (config.telegramWebhookUrl) {
     while (!signal?.aborted) {
@@ -2113,7 +2137,10 @@ export async function startTelegramBot(signal?: AbortSignal) {
         break;
       } catch (error: any) {
         markTelegramDegraded(error.message);
-        logger.error('telegram_webhook_setup_failed', { message: error.message });
+        logger.error('telegram_webhook_setup_failed', {
+          message: error.message,
+          cause: error.causeMessage
+        });
         await wait(10_000);
       }
     }
@@ -2125,9 +2152,14 @@ export async function startTelegramBot(signal?: AbortSignal) {
     return;
   }
 
-  await deleteWebhook(false).catch((error: any) => {
-    logger.error('telegram_delete_webhook_failed', { message: error.message });
-  });
+  if (telegramApiReachable) {
+    await deleteWebhook(false).catch((error: any) => {
+      logger.error('telegram_delete_webhook_failed', {
+        message: error.message,
+        cause: error.causeMessage
+      });
+    });
+  }
   let offset = 0;
 
   while (!signal?.aborted) {
@@ -2170,7 +2202,10 @@ export async function startTelegramBot(signal?: AbortSignal) {
         continue;
       }
       markTelegramDegraded(error.message);
-      logger.error('telegram_poll_error', { message: error.message });
+      logger.error('telegram_poll_error', {
+        message: error.message,
+        cause: error.causeMessage
+      });
       await wait(3000);
     }
   }
