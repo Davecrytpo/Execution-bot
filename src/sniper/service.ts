@@ -143,6 +143,7 @@ export class SniperService {
   private lastMessageAt = 0;
   private heartbeatTimer: NodeJS.Timeout | null = null;
   private cleanupTimer: NodeJS.Timeout | null = null;
+  private statusTimer: NodeJS.Timeout | null = null;
   private requestId = 1;
   private readonly pendingRequests = new Map<number, SubscriptionRequest>();
   private readonly accountSubscriptions = new Map<number, { mint: string; bondingCurve: string }>();
@@ -178,6 +179,9 @@ export class SniperService {
     }
     if (this.cleanupTimer) {
       clearInterval(this.cleanupTimer);
+    }
+    if (this.statusTimer) {
+      clearInterval(this.statusTimer);
     }
     for (const state of this.launchStates.values()) {
       if (state.decisionTimer) {
@@ -328,6 +332,17 @@ export class SniperService {
       this.pruneProcessedSignatures();
       this.pruneLaunchStates();
     }, 30_000);
+
+    this.statusTimer = setInterval(() => {
+      logger.info('sniper_runtime_tick', {
+        connected: this.ws?.readyState === WebSocket.OPEN,
+        logsSubscriptionId: this.logsSubscriptionId,
+        queueDepth: this.logQueue.length,
+        trackedLaunches: this.launchStates.size,
+        lastMessageAgeMs: this.lastMessageAt ? Date.now() - this.lastMessageAt : null,
+        lastCreateQueuedAgeMs: this.lastCreateQueuedAt ? Date.now() - this.lastCreateQueuedAt : null
+      });
+    }, 60_000);
   }
 
   private async scheduleReconnect() {
@@ -367,6 +382,7 @@ export class SniperService {
 
       if (request.type === 'logs') {
         this.logsSubscriptionId = typeof payload.result === 'number' ? payload.result : null;
+        logger.info('sniper_logs_subscribed', { subscriptionId: this.logsSubscriptionId });
       } else if (request.type === 'account' && typeof payload.result === 'number') {
         this.accountSubscriptions.set(payload.result, {
           mint: request.mint,
@@ -409,9 +425,18 @@ export class SniperService {
       const now = Date.now();
       if (now - this.lastCreateQueuedAt < config.sniperCreateProcessIntervalMs) {
         incMetric('sniper.create_dropped');
+        logger.info('sniper_create_dropped', {
+          signature,
+          intervalMs: config.sniperCreateProcessIntervalMs,
+          sinceLastCreateMs: now - this.lastCreateQueuedAt
+        });
         return;
       }
       this.lastCreateQueuedAt = now;
+      logger.info('sniper_create_queued', {
+        signature,
+        queueDepth: this.logQueue.length
+      });
     }
 
     if (eventKind !== 'create' && this.launchStates.size === 0) {
