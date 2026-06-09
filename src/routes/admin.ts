@@ -67,6 +67,166 @@ adminRouter.get('/telegram', async (_req, res) => {
   }
 });
 
+adminRouter.get('/trading-health', async (_req, res) => {
+  try {
+    const [
+      users,
+      sniperCounts,
+      recentSniper,
+      signalCounts,
+      recentSignals,
+      orderCounts,
+      recentOrders
+    ] = await Promise.all([
+      query<{
+        id: string;
+        telegram_user_id: string;
+        auto_buy_enabled: boolean;
+        max_buy_sol: string;
+        daily_limit_sol: string;
+        min_score: string;
+        degen_turbo_enabled: boolean;
+        allowed_sources: string[];
+        wallet_public_key: string | null;
+        wallet_balance_sol: string | null;
+        open_positions: string;
+      }>(
+        `
+        SELECT
+          tu.id,
+          tu.telegram_user_id::text,
+          tu.auto_buy_enabled,
+          tu.max_buy_sol::text,
+          tu.daily_limit_sol::text,
+          tu.min_score::text,
+          tu.degen_turbo_enabled,
+          tu.allowed_sources,
+          cw.public_key AS wallet_public_key,
+          (ws.last_balance_lamports::numeric / 1000000000)::text AS wallet_balance_sol,
+          COALESCE((
+            SELECT COUNT(*)::text
+            FROM positions p
+            WHERE p.user_id = tu.id AND p.status IN ('OPEN', 'CLOSING')
+          ), '0') AS open_positions
+        FROM telegram_users tu
+        LEFT JOIN custody_wallets cw ON cw.user_id = tu.id AND cw.is_active = true
+        LEFT JOIN wallet_state ws ON ws.wallet_id = cw.id
+        ORDER BY tu.updated_at DESC
+        LIMIT 10
+        `
+      ),
+      query<{ status: string; count: string }>(
+        `
+        SELECT status, COUNT(*)::text AS count
+        FROM sniper_tokens
+        GROUP BY status
+        `
+      ),
+      query<{
+        mint: string;
+        status: string;
+        score: string | null;
+        decision: string | null;
+        liquidity_sol: string | null;
+        curve_progress_pct: string | null;
+        detected_at: string;
+        updated_at: string;
+      }>(
+        `
+        SELECT mint, status, score::text, decision, liquidity_sol::text, curve_progress_pct::text,
+               detected_at::text, updated_at::text
+        FROM sniper_tokens
+        ORDER BY detected_at DESC
+        LIMIT 10
+        `
+      ),
+      query<{ status: string; count: string }>(
+        `
+        SELECT status, COUNT(*)::text AS count
+        FROM execution_signals
+        GROUP BY status
+        `
+      ),
+      query<{
+        id: string;
+        mint: string;
+        source: string;
+        side: string;
+        score: string | null;
+        status: string;
+        created_at: string;
+      }>(
+        `
+        SELECT id, mint, source, side, score::text, status, created_at::text
+        FROM execution_signals
+        ORDER BY created_at DESC
+        LIMIT 10
+        `
+      ),
+      query<{ status: string; count: string }>(
+        `
+        SELECT status, COUNT(*)::text AS count
+        FROM execution_orders
+        GROUP BY status
+        `
+      ),
+      query<{
+        id: string;
+        mint: string;
+        side: string;
+        status: string;
+        requested_amount_sol: string | null;
+        txsig: string | null;
+        error_message: string | null;
+        created_at: string;
+      }>(
+        `
+        SELECT id, mint, side, status, requested_amount_sol::text, txsig, error_message, created_at::text
+        FROM execution_orders
+        ORDER BY created_at DESC
+        LIMIT 10
+        `
+      )
+    ]);
+
+    return res.json({
+      users: users.rows.map((row) => ({
+        ...row,
+        max_buy_sol: Number(row.max_buy_sol),
+        daily_limit_sol: Number(row.daily_limit_sol),
+        min_score: Number(row.min_score),
+        wallet_balance_sol: row.wallet_balance_sol === null ? null : Number(row.wallet_balance_sol),
+        open_positions: Number(row.open_positions)
+      })),
+      sniper: {
+        counts: Object.fromEntries(sniperCounts.rows.map((row) => [row.status, Number(row.count)])),
+        recent: recentSniper.rows.map((row) => ({
+          ...row,
+          score: row.score === null ? null : Number(row.score),
+          liquidity_sol: row.liquidity_sol === null ? null : Number(row.liquidity_sol),
+          curve_progress_pct: row.curve_progress_pct === null ? null : Number(row.curve_progress_pct)
+        }))
+      },
+      signals: {
+        counts: Object.fromEntries(signalCounts.rows.map((row) => [row.status, Number(row.count)])),
+        recent: recentSignals.rows.map((row) => ({
+          ...row,
+          score: row.score === null ? null : Number(row.score)
+        }))
+      },
+      orders: {
+        counts: Object.fromEntries(orderCounts.rows.map((row) => [row.status, Number(row.count)])),
+        recent: recentOrders.rows.map((row) => ({
+          ...row,
+          requested_amount_sol: row.requested_amount_sol === null ? null : Number(row.requested_amount_sol)
+        }))
+      }
+    });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message ?? 'trading_health_failed' });
+  }
+});
+
 adminRouter.get('/sniper', async (_req, res) => {
   try {
     const [counts, recent, rpcStatus, runtime] = await Promise.all([
