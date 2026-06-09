@@ -25,6 +25,7 @@ import {
   getPumpEventKindFromLogs,
   LAMPORTS_PER_SOL,
   PUMP_GLOBAL_ACCOUNT,
+  TOKEN_PROGRAM_ID,
   type BondingCurveMetrics,
   type BondingCurveState,
   type PumpEventKind,
@@ -583,8 +584,15 @@ export class SniperService {
   }
 
   private async resolveMint(tx: ParsedTransactionWithMeta, eventKind: PumpEventKind) {
+    if (eventKind === 'create') {
+      const instructionMint = await this.resolveCreateInstructionMint(tx);
+      if (instructionMint) {
+        return instructionMint;
+      }
+    }
+
     const direct = extractMintFromParsedTransaction(tx, eventKind);
-    if (direct) {
+    if (direct && (eventKind !== 'create' || await this.isTokenMint(direct))) {
       return direct;
     }
 
@@ -601,7 +609,64 @@ export class SniperService {
       .filter(({ account }) => account?.owner.toBase58() === 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA' && account.data.length === 82)
       .map(({ key }) => key.toBase58());
 
-    return candidates[0] ?? null;
+    for (const candidate of candidates) {
+      if (await this.isTokenMint(candidate)) {
+        return candidate;
+      }
+    }
+
+    return null;
+  }
+
+  private async resolveCreateInstructionMint(tx: ParsedTransactionWithMeta) {
+    for (const instruction of tx.transaction.message.instructions) {
+      const programId = 'programId' in instruction
+        ? instruction.programId.toBase58()
+        : '';
+      const accounts = 'accounts' in instruction
+        ? instruction.accounts
+        : [];
+
+      if (programId !== config.pumpProgramId || !accounts.length) {
+        continue;
+      }
+
+      const candidate = accounts[0]?.toBase58();
+      if (candidate && await this.isTokenMint(candidate)) {
+        return candidate;
+      }
+    }
+
+    return null;
+  }
+
+  private async isTokenMint(address: string) {
+    try {
+      const info = await rpcPool.withConnection(
+        (connection) => connection.getParsedAccountInfo(new PublicKey(address), 'confirmed'),
+        { preferPrimary: false }
+      );
+      const data = info.value?.data as {
+        parsed?: {
+          type?: string;
+          info?: {
+            decimals?: number;
+          };
+        };
+      } | Buffer | undefined;
+
+      if (!info.value || info.value.owner.toBase58() !== TOKEN_PROGRAM_ID || !data || Buffer.isBuffer(data)) {
+        return false;
+      }
+
+      return data.parsed?.type === 'mint' && typeof data.parsed.info?.decimals === 'number';
+    } catch (error: any) {
+      logger.error('sniper_mint_validation_failed', {
+        address,
+        message: error.message
+      });
+      return false;
+    }
   }
 
   private async fetchGlobalState() {
