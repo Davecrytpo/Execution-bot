@@ -59,6 +59,19 @@ function buildEndpoints(): RpcEndpoint[] {
   }));
 }
 
+function isTransientRpcError(message: string) {
+  const normalized = message.toLowerCase();
+  return normalized.includes('429')
+    || normalized.includes('rate limit')
+    || normalized.includes('rate limited')
+    || normalized.includes('timeout:')
+    || normalized.includes('fetch failed')
+    || normalized.includes('econnreset')
+    || normalized.includes('etimedout')
+    || normalized.includes('socket')
+    || normalized.includes('network');
+}
+
 async function withTimeout<T>(operation: Promise<T>, timeoutMs: number, label: string): Promise<T> {
   let timer: NodeJS.Timeout | undefined;
 
@@ -103,19 +116,21 @@ export class RpcPool {
   }
 
   private markEndpointFailure(endpoint: RpcEndpoint, message: string) {
-    this.endpointCooldownUntil.set(endpoint.name, Date.now() + config.rpcEndpointCooldownMs);
-
     const key = `${endpoint.name}:${message}`;
     const nextAllowedLogAt = this.endpointErrorLogUntil.get(key) ?? 0;
-    if (Date.now() < nextAllowedLogAt) {
-      return;
+
+    if (isTransientRpcError(message)) {
+      this.endpointCooldownUntil.set(endpoint.name, Date.now() + config.rpcEndpointCooldownMs);
     }
 
-    this.endpointErrorLogUntil.set(key, Date.now() + config.rpcErrorLogCooldownMs);
-    logger.error('rpc_operation_failed', {
-      endpoint: endpoint.name,
-      message
-    });
+    if (Date.now() >= nextAllowedLogAt) {
+      this.endpointErrorLogUntil.set(key, Date.now() + config.rpcErrorLogCooldownMs);
+      logger.error('rpc_operation_failed', {
+        endpoint: endpoint.name,
+        transient: isTransientRpcError(message),
+        message
+      });
+    }
   }
 
   private clearEndpointFailure(endpoint: RpcEndpoint) {
