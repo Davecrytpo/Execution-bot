@@ -128,6 +128,40 @@ function isConfirmationUncertain(error: unknown) {
     || message.includes('rpc_all_failed');
 }
 
+function composeOrderCompletionNotice(params: {
+  confirmationWasUncertain: boolean;
+  tokenNotTradable: boolean;
+  mint: string;
+  finalMessage: string;
+  attemptsUsed: number;
+}) {
+  const attempts = params.attemptsUsed || 1;
+  if (params.confirmationWasUncertain) {
+    return [
+      '⚠️ *Trade confirmation pending*',
+      `Token: \`${params.mint.slice(0, 8)}...${params.mint.slice(-6)}\``,
+      'A transaction was submitted, but confirmation is still pending.',
+      `Status: ${humanizeExecutionError(params.finalMessage)}`
+    ];
+  }
+
+  if (params.tokenNotTradable) {
+    return [
+      '⏭️ *Trade skipped*',
+      `Token: \`${params.mint.slice(0, 8)}...${params.mint.slice(-6)}\``,
+      'Reason: Jupiter route is not available for this token yet.',
+      'No SOL was spent.'
+    ];
+  }
+
+  return [
+    '❌ *Trade failed*',
+    `Token: \`${params.mint.slice(0, 8)}...${params.mint.slice(-6)}\``,
+    `Reason: ${humanizeExecutionError(params.finalMessage)}`,
+    `Tried: \`${attempts} attempt${attempts === 1 ? '' : 's'}\``
+  ];
+}
+
 function getJupiterHeaders() {
   return {
     'Content-Type': 'application/json',
@@ -824,12 +858,13 @@ export async function processNextOrder() {
   if (finalStatus === 'FAILED') {
     incMetric('orders.failed');
   }
-  await sendMessage(order.chat_id, [
-    confirmationWasUncertain ? '⚠️ *Trade confirmation pending*' : tokenNotTradable ? '⏭️ *Trade skipped*' : '❌ *Trade failed*',
-    `Token: \`${order.mint.slice(0, 8)}...${order.mint.slice(-6)}\``,
-    `Reason: ${humanizeExecutionError(finalMessage)}`,
-    `Tried: \`${attemptsUsed || 1} attempt${(attemptsUsed || 1) === 1 ? '' : 's'}\``
-  ].join('\n'));
+  await sendMessage(order.chat_id, composeOrderCompletionNotice({
+    confirmationWasUncertain,
+    tokenNotTradable,
+    mint: order.mint,
+    finalMessage,
+    attemptsUsed
+  }).join('\n'));
 
   if (finalStatus === 'FAILED' && registerFailure(`order:${order.user_id}`)) {
     await sendMessage(order.chat_id, 'Alert: multiple order failures detected recently. Review settings, wallet balance, and RPC/Jupiter health.');
