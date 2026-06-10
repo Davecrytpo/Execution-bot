@@ -34,6 +34,7 @@ async function run() {
     getPumpEventKindFromLogs
   } = await import('../sniper/pumpFun.js');
   const { decideLaunch } = await import('../sniper/scoring.js');
+  const { isJupiterRouteUnavailableError } = await import('../sniper/service.js');
 
   const payload = encryptSecret('secret-value');
   assert.equal(decryptSecret(payload.encrypted, payload.iv, payload.authTag), 'secret-value');
@@ -92,6 +93,9 @@ async function run() {
   assert.equal(isTokenNotTradableError(new Error('quote_failed_400:{"errorCode":"TOKEN_NOT_TRADABLE"}')), true);
   assert.equal(isRetryableOrderError(new Error('quote_failed_400:{"errorCode":"TOKEN_NOT_TRADABLE"}')), false);
   assert.equal(isRetryableOrderError(new Error('swap_failed_500')), true);
+  assert.equal(isJupiterRouteUnavailableError('{"errorCode":"TOKEN_NOT_TRADABLE"}'), true);
+  assert.equal(isJupiterRouteUnavailableError('Could not find any route'), true);
+  assert.equal(isJupiterRouteUnavailableError('rate limit'), false);
 
   assert.equal(isValidPositiveSolAmount('0.1'), true);
   assert.equal(isValidPositiveSolAmount('0'), false);

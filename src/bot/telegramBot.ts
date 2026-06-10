@@ -586,6 +586,7 @@ async function renderDashboard(
     notice?: string;
     preservePending?: boolean;
     preferredMessageId?: number;
+    forceNewMessage?: boolean;
   }
 ) {
   const session = getDashboardSession(identity.chatId);
@@ -595,7 +596,7 @@ async function renderDashboard(
   }
 
   const payload = await buildDashboardView(identity, session, options?.notice);
-  const preferredMessageId = options?.preferredMessageId ?? session.messageId;
+  const preferredMessageId = options?.forceNewMessage ? undefined : options?.preferredMessageId ?? session.messageId;
 
   if (preferredMessageId) {
     try {
@@ -1212,9 +1213,10 @@ async function showDashboard(
   view: DashboardView,
   notice?: string,
   preferredMessageId?: number,
-  preservePending = false
+  preservePending = false,
+  forceNewMessage = false
 ) {
-  await renderDashboard(identity, view, { notice, preferredMessageId, preservePending });
+  await renderDashboard(identity, view, { notice, preferredMessageId, preservePending, forceNewMessage });
 }
 
 async function showStartExperience(update: TelegramUpdate) {
@@ -1235,7 +1237,7 @@ async function showStartExperience(update: TelegramUpdate) {
   const notice = identity.walletContext.exportedKey
     ? 'Your wallet is ready. Save the private key sent below before trading.'
     : 'Your dashboard is live. Use the buttons below instead of typing long command lists.';
-  await showDashboard(identity, 'home', notice);
+  await showDashboard(identity, 'home', notice, undefined, false, true);
 
   if (identity.walletContext.exportedKey) {
     await sendMessage(
@@ -1770,20 +1772,20 @@ async function handleCommand(update: TelegramUpdate) {
     case '/start':
       return showStartExperience(update);
     case '/menu':
-      return showDashboard(identity, 'home');
+      return showDashboard(identity, 'home', undefined, undefined, false, true);
     case '/wallet':
-      return showDashboard(identity, 'wallet');
+      return showDashboard(identity, 'wallet', undefined, undefined, false, true);
     case '/status':
-      return showDashboard(identity, 'analytics');
+      return showDashboard(identity, 'analytics', undefined, undefined, false, true);
     case '/help':
-      return showDashboard(identity, 'support');
+      return showDashboard(identity, 'support', undefined, undefined, false, true);
     case '/close':
       return closeDashboard(identity);
     case '/trade':
     case '/buy':
       if (!args.length) {
         session.pendingInput = { kind: 'trade_mint' };
-        return showDashboard(identity, 'trading', 'Manual trade started.', undefined, true);
+        return showDashboard(identity, 'trading', 'Manual trade started.', undefined, true, true);
       }
       return handleManualTradeCommand(identity, args);
     case '/enable':

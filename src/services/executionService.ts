@@ -29,6 +29,18 @@ const TURBO_MAX_OPEN_POSITIONS_PER_SOURCE = 3;
 const TURBO_TOKEN_COOLDOWN_MINUTES = 10;
 const TURBO_DUPLICATE_WINDOW_SECONDS = 90;
 const failureState = new Map<string, number[]>();
+const DASHBOARD_REPLY_MARKUP = {
+  inline_keyboard: [
+    [
+      { text: 'Menu', callback_data: 'view:home' },
+      { text: 'Trading', callback_data: 'view:trading' }
+    ],
+    [
+      { text: 'Wallet', callback_data: 'view:wallet' },
+      { text: 'Positions', callback_data: 'view:analytics_positions' }
+    ]
+  ]
+};
 type OrderMetadata = Record<string, unknown>;
 
 type OrderRow = {
@@ -812,7 +824,8 @@ export async function processNextOrder() {
             `Priority fee: \`${(attemptPriorityFeeLamports / LAMPORTS_PER_SOL).toFixed(6)} SOL\``,
             attempt > 1 ? `Attempt: \`${attempt}/${MAX_ORDER_ATTEMPTS}\`` : '',
             `[View on Solscan](https://solscan.io/tx/${signature})`
-          ].filter(Boolean).join('\n')
+          ].filter(Boolean).join('\n'),
+          { replyMarkup: DASHBOARD_REPLY_MARKUP }
         );
 
         return true;
@@ -864,10 +877,14 @@ export async function processNextOrder() {
     mint: order.mint,
     finalMessage,
     attemptsUsed
-  }).join('\n'));
+  }).join('\n'), { replyMarkup: DASHBOARD_REPLY_MARKUP });
 
   if (finalStatus === 'FAILED' && registerFailure(`order:${order.user_id}`)) {
-    await sendMessage(order.chat_id, 'Alert: multiple order failures detected recently. Review settings, wallet balance, and RPC/Jupiter health.');
+    await sendMessage(
+      order.chat_id,
+      'Alert: multiple order failures detected recently. Review settings, wallet balance, and RPC/Jupiter health.',
+      { replyMarkup: DASHBOARD_REPLY_MARKUP }
+    );
   }
   logger.error('order_failed', { orderId: order.id, status: finalStatus, message: finalMessage });
 
@@ -934,7 +951,8 @@ async function processNextOrderOnce() {
         `Slippage: \`${swapResponse.dynamicSlippageReport?.slippageBps ?? order.slippage_bps} bps\``,
         `Priority fee: \`${(Number(order.priority_fee_lamports) / LAMPORTS_PER_SOL).toFixed(6)} SOL\``,
         `[🔍 View on Solscan](https://solscan.io/tx/${signature})`
-      ].join('\n')
+      ].join('\n'),
+      { replyMarkup: DASHBOARD_REPLY_MARKUP }
     );
   } catch (error: any) {
     await query(

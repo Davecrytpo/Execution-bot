@@ -107,6 +107,8 @@ type QueuedLogNotification = {
 };
 
 type TradeEventKind = 'buy' | 'sell' | 'migrate';
+const SOL_MINT = 'So11111111111111111111111111111111111111112';
+const ROUTE_PROBE_AMOUNT_LAMPORTS = 5_000_000;
 
 type AccountNotification = {
   params?: {
@@ -129,6 +131,15 @@ function absoluteNumber(value: number) {
 
 function normalizeSymbol(mint: string, symbol?: string) {
   return symbol?.trim() || mint.slice(0, 6);
+}
+
+export function isJupiterRouteUnavailableError(error: unknown) {
+  const message = String(error instanceof Error ? error.message : error ?? '').toLowerCase();
+  return message.includes('token_not_tradable')
+    || message.includes('not tradable')
+    || message.includes('could not find any route')
+    || message.includes('no routes')
+    || message.includes('route not found');
 }
 
 function isTradeEventKind(eventKind: PumpEventKind): eventKind is TradeEventKind {
@@ -890,6 +901,43 @@ export class SniperService {
     }
   }
 
+  private async hasJupiterRoute(mint: string) {
+    const params = new URLSearchParams({
+      inputMint: SOL_MINT,
+      outputMint: mint,
+      amount: String(ROUTE_PROBE_AMOUNT_LAMPORTS),
+      slippageBps: '2000'
+    });
+
+    try {
+      const response = await fetch(`${config.jupiterApiBaseUrl}/quote?${params.toString()}`, {
+        headers: config.jupiterApiKey ? { 'x-api-key': config.jupiterApiKey } : {}
+      });
+      if (response.ok) {
+        const data = await response.json() as { outAmount?: string };
+        return Number(data.outAmount ?? 0) > 0;
+      }
+
+      const body = await response.text().catch(() => '');
+      if (response.status === 400 && isJupiterRouteUnavailableError(body)) {
+        return false;
+      }
+
+      logger.info('sniper_jupiter_route_probe_failed', {
+        mint,
+        status: response.status,
+        body: body.slice(0, 160)
+      });
+      return false;
+    } catch (error: any) {
+      logger.info('sniper_jupiter_route_probe_error', {
+        mint,
+        message: error.message
+      });
+      return false;
+    }
+  }
+
   private summarizeTrades(state: RuntimeLaunchState): LaunchStats {
     const windowStart = Date.now() - config.sniperMomentumWindowMs;
     const trades = state.trades.filter((trade) => trade.timestamp >= windowStart);
@@ -1164,7 +1212,11 @@ export class SniperService {
       }
     });
 
-    if (decision.action === 'BUY' && !state.dexMetadata?.pairAddress) {
+    const jupiterRouteReady = decision.action === 'BUY'
+      ? Boolean(state.dexMetadata?.pairAddress) && await this.hasJupiterRoute(mint)
+      : false;
+
+    if (decision.action === 'BUY' && !jupiterRouteReady) {
       await upsertSniperToken({
         mint,
         bondingCurve: state.bondingCurve,
@@ -1178,7 +1230,9 @@ export class SniperService {
         metrics: state.metrics,
         metadata: {
           decision: 'WAIT_FOR_ROUTE',
-          reason: 'Jupiter cannot trade this pump.fun token until a DEX route exists.',
+          reason: state.dexMetadata?.pairAddress
+            ? 'Jupiter quote is not ready for this token yet.'
+            : 'Jupiter cannot trade this pump.fun token until a DEX route exists.',
           hardRejects: decision.hardRejects,
           reasons: decision.reasons
         }
@@ -1186,7 +1240,8 @@ export class SniperService {
       logger.info('sniper_buy_skipped_route_not_ready', {
         mint,
         score: decision.score,
-        curveProgressPct: state.metrics.curveProgressPct
+        curveProgressPct: state.metrics.curveProgressPct,
+        pairAddress: state.dexMetadata?.pairAddress ?? null
       });
       return;
     }
