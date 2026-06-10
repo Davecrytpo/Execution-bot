@@ -14,7 +14,12 @@ async function run() {
   const { encryptSecret, decryptSecret } = await import('../lib/crypto.js');
   const { normalizeDatabaseUrl, resolveDatabaseSsl } = await import('../lib/db.js');
   const { sanitizeForLog } = await import('../lib/logger.js');
-  const { evaluateTurboGuardRow, validateSignalPayload } = await import('../services/executionService.js');
+  const {
+    evaluateTurboGuardRow,
+    isRetryableOrderError,
+    isTokenNotTradableError,
+    validateSignalPayload
+  } = await import('../services/executionService.js');
   const { isValidPositiveSolAmount } = await import('../bot/wizardLogic.js');
   const {
     deriveAutoBuyExecutionState,
@@ -84,6 +89,9 @@ async function run() {
     }),
     false
   );
+  assert.equal(isTokenNotTradableError(new Error('quote_failed_400:{"errorCode":"TOKEN_NOT_TRADABLE"}')), true);
+  assert.equal(isRetryableOrderError(new Error('quote_failed_400:{"errorCode":"TOKEN_NOT_TRADABLE"}')), false);
+  assert.equal(isRetryableOrderError(new Error('swap_failed_500')), true);
 
   assert.equal(isValidPositiveSolAmount('0.1'), true);
   assert.equal(isValidPositiveSolAmount('0'), false);

@@ -1164,6 +1164,33 @@ export class SniperService {
       }
     });
 
+    if (decision.action === 'BUY' && !state.dexMetadata?.pairAddress) {
+      await upsertSniperToken({
+        mint,
+        bondingCurve: state.bondingCurve,
+        creatorWallet: state.creatorWallet,
+        deployerWallet: state.deployerWallet,
+        detectedSignature: state.signature,
+        launchSlot: state.slot,
+        status: 'SKIPPED',
+        decision: 'jupiter_route_not_ready',
+        score: decision.score,
+        metrics: state.metrics,
+        metadata: {
+          decision: 'WAIT_FOR_ROUTE',
+          reason: 'Jupiter cannot trade this pump.fun token until a DEX route exists.',
+          hardRejects: decision.hardRejects,
+          reasons: decision.reasons
+        }
+      });
+      logger.info('sniper_buy_skipped_route_not_ready', {
+        mint,
+        score: decision.score,
+        curveProgressPct: state.metrics.curveProgressPct
+      });
+      return;
+    }
+
     if (decision.action === 'BUY') {
       const result = await enqueueSignal({
         signalKey: `pumpfun:${mint}:BUY:${state.detectedAt}`,

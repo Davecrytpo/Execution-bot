@@ -49,8 +49,8 @@ import { getSniperRuntimeStatus, type SniperRuntimeStatus } from '../sniper/runt
 const MIN_BUY_SOL = 0.005;
 const DEGEN_MIN_SCORE = 18;
 const DEGEN_DAILY_LIMIT_SOL = 0.15;
-const DEGEN_SLIPPAGE_BPS = 500;
-const DEGEN_PRIORITY_SOL = 0.0002;
+const DEGEN_SLIPPAGE_BPS = 2000;
+const DEGEN_PRIORITY_SOL = 0.001;
 const TURBO_MAX_OPEN_POSITIONS_PER_SOURCE = 3;
 const TURBO_TOKEN_COOLDOWN_MINUTES = 10;
 const TURBO_DUPLICATE_WINDOW_SECONDS = 90;
@@ -451,8 +451,8 @@ function pendingPrompt(input?: PendingInput): string | undefined {
       return [
         '🌊 *Enter your slippage tolerance in basis points (bps).*',
         '100 bps = 1%. Valid range: `50` to `5000`.',
-        '• `300` = 3% (recommended)  •  `1000` = 10% (low-liquidity)',
-        'Example: `300`'
+        '• `2000` = 20% pump.fun baseline  •  `5000` = 50% high-volatility',
+        'Example: `2000`'
       ].join('\n');
     case 'set_priority':
       return [

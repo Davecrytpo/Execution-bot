@@ -99,7 +99,7 @@ function resolveAttemptPriority(basePriorityFeeLamports: number, attempt: number
   return clampNumber(safeBase + ((attempt - 1) * 1_000_000), MIN_PRIORITY_FEE_LAMPORTS, MAX_PRIORITY_FEE_LAMPORTS);
 }
 
-function isRetryableOrderError(error: unknown) {
+export function isRetryableOrderError(error: unknown) {
   const message = String(error instanceof Error ? error.message : error ?? '').toLowerCase();
   return message.includes('quote_failed_5')
     || message.includes('swap_failed_5')
@@ -113,6 +113,11 @@ function isRetryableOrderError(error: unknown) {
     || message.includes('rpc_send_failed')
     || message.includes('blockhashnotfound')
     || message.includes('slippage');
+}
+
+export function isTokenNotTradableError(error: unknown) {
+  const message = String(error instanceof Error ? error.message : error ?? '').toLowerCase();
+  return message.includes('token_not_tradable') || message.includes('not tradable');
 }
 
 function isConfirmationUncertain(error: unknown) {
@@ -688,6 +693,7 @@ export async function processNextOrder() {
   let lastError: unknown = null;
   let lastSignature: string | null = null;
   let confirmationWasUncertain = false;
+  let attemptsUsed = 0;
 
   try {
     incMetric('orders.processing');
@@ -696,6 +702,7 @@ export async function processNextOrder() {
     const signer = Keypair.fromSecretKey(secret);
 
     for (let attempt = 1; attempt <= MAX_ORDER_ATTEMPTS; attempt += 1) {
+      attemptsUsed = attempt;
       const attemptSlippageBps = resolveAttemptSlippage(Number(order.slippage_bps ?? 0), attempt);
       const attemptPriorityFeeLamports = resolveAttemptPriority(Number(order.priority_fee_lamports ?? 0), attempt);
 
@@ -798,9 +805,11 @@ export async function processNextOrder() {
     lastError = error;
   }
 
-  const finalStatus = confirmationWasUncertain ? 'PROCESSING' : 'FAILED';
+  const tokenNotTradable = isTokenNotTradableError(lastError);
+  const finalStatus = confirmationWasUncertain ? 'PROCESSING' : tokenNotTradable ? 'SKIPPED' : 'FAILED';
   const finalMessage = confirmationWasUncertain
     ? `confirmation_unknown:${lastSignature ?? 'no_signature'}:${lastError instanceof Error ? lastError.message : String(lastError ?? 'unknown_error')}`
+    : tokenNotTradable ? 'Jupiter route is not available for this token yet.'
     : lastError instanceof Error ? lastError.message : String(lastError ?? 'unknown_error');
 
   await query(
@@ -816,13 +825,13 @@ export async function processNextOrder() {
     incMetric('orders.failed');
   }
   await sendMessage(order.chat_id, [
-    confirmationWasUncertain ? '⚠️ *Trade confirmation pending*' : '❌ *Trade failed*',
+    confirmationWasUncertain ? '⚠️ *Trade confirmation pending*' : tokenNotTradable ? '⏭️ *Trade skipped*' : '❌ *Trade failed*',
     `Token: \`${order.mint.slice(0, 8)}...${order.mint.slice(-6)}\``,
     `Reason: ${humanizeExecutionError(finalMessage)}`,
-    `Tried: \`${MAX_ORDER_ATTEMPTS} attempts\``
+    `Tried: \`${attemptsUsed || 1} attempt${(attemptsUsed || 1) === 1 ? '' : 's'}\``
   ].join('\n'));
 
-  if (registerFailure(`order:${order.user_id}`)) {
+  if (finalStatus === 'FAILED' && registerFailure(`order:${order.user_id}`)) {
     await sendMessage(order.chat_id, 'Alert: multiple order failures detected recently. Review settings, wallet balance, and RPC/Jupiter health.');
   }
   logger.error('order_failed', { orderId: order.id, status: finalStatus, message: finalMessage });
