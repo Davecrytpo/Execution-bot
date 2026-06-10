@@ -15,8 +15,8 @@ CREATE TABLE IF NOT EXISTS telegram_users (
     degen_turbo_enabled BOOLEAN NOT NULL DEFAULT false,
     stop_loss_pct NUMERIC NOT NULL DEFAULT 20,
     take_profit_pct NUMERIC NOT NULL DEFAULT 75,
-    slippage_bps INTEGER NOT NULL DEFAULT 500,
-    priority_fee_lamports BIGINT NOT NULL DEFAULT 200000,
+    slippage_bps INTEGER NOT NULL DEFAULT 2000,
+    priority_fee_lamports BIGINT NOT NULL DEFAULT 1000000,
     withdraw_max_per_tx_sol NUMERIC NOT NULL DEFAULT 0.2,
     withdraw_daily_limit_sol NUMERIC NOT NULL DEFAULT 0.5,
     withdraw_address_cooldown_minutes INTEGER NOT NULL DEFAULT 10,
@@ -165,8 +165,10 @@ CREATE INDEX IF NOT EXISTS idx_audit_logs_user_created ON audit_logs(user_id, cr
 
 ALTER TABLE telegram_users ALTER COLUMN daily_limit_sol SET DEFAULT 0.15;
 ALTER TABLE telegram_users ALTER COLUMN min_score SET DEFAULT 20;
-ALTER TABLE telegram_users ALTER COLUMN slippage_bps SET DEFAULT 500;
-ALTER TABLE telegram_users ALTER COLUMN priority_fee_lamports SET DEFAULT 200000;
+ALTER TABLE telegram_users ALTER COLUMN slippage_bps SET DEFAULT 2000;
+ALTER TABLE telegram_users ALTER COLUMN priority_fee_lamports SET DEFAULT 1000000;
+UPDATE telegram_users SET slippage_bps = 2000 WHERE slippage_bps < 1000;
+UPDATE telegram_users SET priority_fee_lamports = 1000000 WHERE priority_fee_lamports < 500000;
 ALTER TABLE telegram_users ADD COLUMN IF NOT EXISTS degen_turbo_enabled BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE telegram_users ADD COLUMN IF NOT EXISTS withdraw_max_per_tx_sol NUMERIC NOT NULL DEFAULT 0.2;
 ALTER TABLE telegram_users ADD COLUMN IF NOT EXISTS withdraw_daily_limit_sol NUMERIC NOT NULL DEFAULT 0.5;

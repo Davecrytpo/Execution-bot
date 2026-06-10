@@ -128,16 +128,16 @@ export function decideLaunch(snapshot: LaunchSnapshot): LaunchDecision {
       : 'medium';
 
   const recommendedSlippageBps = ultraAggressive
-    ? 900
+    ? 5000
     : aggressive
-      ? 650
-      : 400;
+      ? 3000
+      : 2000;
 
   const recommendedPriorityFeeLamports = priorityLevel === 'veryHigh'
-    ? 800_000
+    ? 5_000_000
     : priorityLevel === 'high'
-      ? 450_000
-      : 250_000;
+      ? 2_000_000
+      : 1_000_000;
 
   reasons.push(
     `liquidity=${snapshot.liquiditySol.toFixed(2)}SOL`,

@@ -2,12 +2,19 @@ import { fileURLToPath } from 'node:url';
 import { config } from '../config.js';
 import { getMetricsSnapshot } from '../lib/metrics.js';
 import { logger } from '../lib/logger.js';
-import { cleanupReplayGuards, evaluateOpenPositions, processNextWithdrawal, scanDeposits } from '../services/executionService.js';
+import {
+  cleanupReplayGuards,
+  evaluateOpenPositions,
+  processNextWithdrawal,
+  reconcileConfirmedSellPositions,
+  scanDeposits
+} from '../services/executionService.js';
 
 export async function startMonitorWorker(signal?: AbortSignal) {
   while (!signal?.aborted) {
     try {
       await scanDeposits();
+      await reconcileConfirmedSellPositions();
       await evaluateOpenPositions();
       await processNextWithdrawal();
       await cleanupReplayGuards();

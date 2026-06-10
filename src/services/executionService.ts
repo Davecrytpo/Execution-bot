@@ -20,6 +20,11 @@ import {
 
 const SOL_MINT = 'So11111111111111111111111111111111111111112';
 const LAMPORTS_PER_SOL = 1_000_000_000;
+const MIN_TRADE_SLIPPAGE_BPS = 2_000;
+const MAX_TRADE_SLIPPAGE_BPS = 5_000;
+const MIN_PRIORITY_FEE_LAMPORTS = 1_000_000;
+const MAX_PRIORITY_FEE_LAMPORTS = 5_000_000;
+const MAX_ORDER_ATTEMPTS = 3;
 const TURBO_MAX_OPEN_POSITIONS_PER_SOURCE = 3;
 const TURBO_TOKEN_COOLDOWN_MINUTES = 10;
 const TURBO_DUPLICATE_WINDOW_SECONDS = 90;
@@ -70,6 +75,54 @@ function humanizeExecutionError(error: unknown) {
     .trim();
 }
 
+async function httpErrorMessage(prefix: string, response: Response) {
+  const body = await response.text().catch(() => '');
+  const detail = body.trim().replace(/\s+/g, ' ').slice(0, 160);
+  return detail ? `${prefix}_${response.status}:${detail}` : `${prefix}_${response.status}`;
+}
+
+function clampNumber(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function resolveAttemptSlippage(baseSlippageBps: number, attempt: number) {
+  const safeBase = clampNumber(baseSlippageBps || MIN_TRADE_SLIPPAGE_BPS, MIN_TRADE_SLIPPAGE_BPS, MAX_TRADE_SLIPPAGE_BPS);
+  return clampNumber(safeBase + ((attempt - 1) * 1_500), MIN_TRADE_SLIPPAGE_BPS, MAX_TRADE_SLIPPAGE_BPS);
+}
+
+function resolveAttemptPriority(basePriorityFeeLamports: number, attempt: number) {
+  const safeBase = clampNumber(
+    basePriorityFeeLamports || MIN_PRIORITY_FEE_LAMPORTS,
+    MIN_PRIORITY_FEE_LAMPORTS,
+    MAX_PRIORITY_FEE_LAMPORTS
+  );
+  return clampNumber(safeBase + ((attempt - 1) * 1_000_000), MIN_PRIORITY_FEE_LAMPORTS, MAX_PRIORITY_FEE_LAMPORTS);
+}
+
+function isRetryableOrderError(error: unknown) {
+  const message = String(error instanceof Error ? error.message : error ?? '').toLowerCase();
+  return message.includes('quote_failed_5')
+    || message.includes('swap_failed_5')
+    || message.includes('swap_transaction_missing')
+    || message.includes('fetch failed')
+    || message.includes('timeout:')
+    || message.includes('econnreset')
+    || message.includes('etimedout')
+    || message.includes('socket')
+    || message.includes('network')
+    || message.includes('rpc_send_failed')
+    || message.includes('blockhashnotfound')
+    || message.includes('slippage');
+}
+
+function isConfirmationUncertain(error: unknown) {
+  const message = String(error instanceof Error ? error.message : error ?? '').toLowerCase();
+  return message.includes('confirmtransaction')
+    || message.includes('confirmation')
+    || message.includes('timeout:')
+    || message.includes('rpc_all_failed');
+}
+
 function getJupiterHeaders() {
   return {
     'Content-Type': 'application/json',
@@ -104,7 +157,7 @@ function resolvePrioritySettings(metadata: OrderMetadata, maxLamports: number) {
 
   return {
     priorityLevel,
-    maxLamports: Math.max(250_000, maxLamports)
+    maxLamports: Math.max(MIN_PRIORITY_FEE_LAMPORTS, maxLamports)
   };
 }
 
@@ -365,7 +418,7 @@ async function getBestQuote(inputMint: string, outputMint: string, amountLamport
     headers: config.jupiterApiKey ? { 'x-api-key': config.jupiterApiKey } : {}
   });
   if (!response.ok) {
-    throw new Error(`quote_failed_${response.status}`);
+    throw new Error(await httpErrorMessage('quote_failed', response));
   }
 
   const data = await response.json() as any;
@@ -471,14 +524,14 @@ async function buildSwapTransaction(quoteResponse: unknown, userPublicKey: strin
       prioritizationFeeLamports: {
         priorityLevelWithMaxLamports: {
           priorityLevel: 'medium',
-          maxLamports: Math.max(250_000, priorityFeeLamports)
+          maxLamports: Math.max(MIN_PRIORITY_FEE_LAMPORTS, priorityFeeLamports)
         }
       }
     })
   });
 
   if (!response.ok) {
-    throw new Error(`swap_failed_${response.status}`);
+    throw new Error(await httpErrorMessage('swap_failed', response));
   }
 
   const data = await response.json() as { swapTransaction?: string };
@@ -489,8 +542,13 @@ async function buildSwapTransaction(quoteResponse: unknown, userPublicKey: strin
   return data.swapTransaction;
 }
 
-async function buildSwapTransactionForOrder(order: OrderRow, quoteResponse: unknown, userPublicKey: string) {
-  const priority = resolvePrioritySettings(order.metadata, Number(order.priority_fee_lamports ?? 0));
+async function buildSwapTransactionForOrder(
+  order: OrderRow,
+  quoteResponse: unknown,
+  userPublicKey: string,
+  priorityFeeLamports?: number
+) {
+  const priority = resolvePrioritySettings(order.metadata, priorityFeeLamports ?? Number(order.priority_fee_lamports ?? 0));
   const response = await fetch(`${config.jupiterApiBaseUrl}/swap`, {
     method: 'POST',
     headers: getJupiterHeaders(),
@@ -510,7 +568,7 @@ async function buildSwapTransactionForOrder(order: OrderRow, quoteResponse: unkn
   });
 
   if (!response.ok) {
-    throw new Error(`swap_failed_${response.status}`);
+    throw new Error(await httpErrorMessage('swap_failed', response));
   }
 
   const data = await response.json() as {
@@ -533,6 +591,11 @@ async function claimNextOrder(): Promise<OrderRow | null> {
       SELECT eo.id
       FROM execution_orders eo
       WHERE eo.status = 'QUEUED'
+        OR (
+          eo.status = 'PROCESSING'
+          AND eo.txsig IS NULL
+          AND eo.updated_at < NOW() - INTERVAL '2 minutes'
+        )
       ORDER BY eo.created_at
       LIMIT 1
       FOR UPDATE SKIP LOCKED
@@ -617,6 +680,157 @@ async function closePositionFromSell(order: OrderRow) {
 }
 
 export async function processNextOrder() {
+  const order = await claimNextOrder();
+  if (!order) {
+    return false;
+  }
+
+  let lastError: unknown = null;
+  let lastSignature: string | null = null;
+  let confirmationWasUncertain = false;
+
+  try {
+    incMetric('orders.processing');
+    const walletRecord = await buildWalletRecord(order);
+    const secret = decodeWalletSecret(walletRecord);
+    const signer = Keypair.fromSecretKey(secret);
+
+    for (let attempt = 1; attempt <= MAX_ORDER_ATTEMPTS; attempt += 1) {
+      const attemptSlippageBps = resolveAttemptSlippage(Number(order.slippage_bps ?? 0), attempt);
+      const attemptPriorityFeeLamports = resolveAttemptPriority(Number(order.priority_fee_lamports ?? 0), attempt);
+
+      try {
+        const quote = await getBestQuote(
+          order.input_mint,
+          order.output_mint,
+          Number(order.amount_lamports),
+          attemptSlippageBps
+        );
+        const swapResponse = await buildSwapTransactionForOrder(
+          order,
+          quote,
+          signer.publicKey.toBase58(),
+          attemptPriorityFeeLamports
+        );
+        const tx = VersionedTransaction.deserialize(Buffer.from(swapResponse.swapTransaction!, 'base64'));
+        tx.sign([signer]);
+
+        const sendResult = await rpcPool.sendRawTransactionRace(tx.serialize(), {
+          skipPreflight: shouldSkipPreflight(order.metadata),
+          preflightCommitment: 'processed'
+        });
+        const signature = sendResult.signature;
+        lastSignature = signature;
+
+        await query(
+          `
+          UPDATE execution_orders
+          SET txsig = $2, updated_at = NOW()
+          WHERE id = $1
+          `,
+          [order.id, signature]
+        );
+
+        let confirmation;
+        try {
+          confirmation = await rpcPool.confirmSignature(signature, 'confirmed');
+        } catch (error) {
+          confirmationWasUncertain = isConfirmationUncertain(error);
+          throw error;
+        }
+
+        if (confirmation.value.err) {
+          throw new Error(JSON.stringify(confirmation.value.err));
+        }
+
+        await query(
+          `
+          UPDATE execution_orders
+          SET status = 'CONFIRMED', txsig = $2, quote_response = $3, updated_at = NOW()
+          WHERE id = $1
+          `,
+          [order.id, signature, quote]
+        );
+
+        if (order.side === 'BUY') {
+          await upsertPositionFromBuy(order, quote);
+        } else if (order.side === 'SELL') {
+          await closePositionFromSell(order);
+        }
+        incMetric('orders.confirmed');
+
+        await sendMessage(
+          order.chat_id,
+          [
+            '✅ *Trade confirmed*',
+            `Token: \`${order.mint.slice(0, 8)}...${order.mint.slice(-6)}\``,
+            `Full mint: \`${order.mint}\``,
+            `Side: \`${order.side}\``,
+            `Spent: \`${(Number(order.amount_lamports) / LAMPORTS_PER_SOL).toFixed(6)} SOL\``,
+            `Slippage: \`${swapResponse.dynamicSlippageReport?.slippageBps ?? attemptSlippageBps} bps\``,
+            `Priority fee: \`${(attemptPriorityFeeLamports / LAMPORTS_PER_SOL).toFixed(6)} SOL\``,
+            attempt > 1 ? `Attempt: \`${attempt}/${MAX_ORDER_ATTEMPTS}\`` : '',
+            `[View on Solscan](https://solscan.io/tx/${signature})`
+          ].filter(Boolean).join('\n')
+        );
+
+        return true;
+      } catch (error) {
+        lastError = error;
+        logger.info('order_attempt_failed', {
+          orderId: order.id,
+          attempt,
+          maxAttempts: MAX_ORDER_ATTEMPTS,
+          slippageBps: attemptSlippageBps,
+          priorityFeeLamports: attemptPriorityFeeLamports,
+          signature: lastSignature,
+          message: error instanceof Error ? error.message : String(error)
+        });
+
+        if (confirmationWasUncertain || attempt >= MAX_ORDER_ATTEMPTS || !isRetryableOrderError(error)) {
+          break;
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, attempt * 600));
+      }
+    }
+  } catch (error: any) {
+    lastError = error;
+  }
+
+  const finalStatus = confirmationWasUncertain ? 'PROCESSING' : 'FAILED';
+  const finalMessage = confirmationWasUncertain
+    ? `confirmation_unknown:${lastSignature ?? 'no_signature'}:${lastError instanceof Error ? lastError.message : String(lastError ?? 'unknown_error')}`
+    : lastError instanceof Error ? lastError.message : String(lastError ?? 'unknown_error');
+
+  await query(
+    `
+    UPDATE execution_orders
+    SET status = $2, error_message = $3, updated_at = NOW()
+    WHERE id = $1
+    `,
+    [order.id, finalStatus, finalMessage]
+  );
+
+  if (finalStatus === 'FAILED') {
+    incMetric('orders.failed');
+  }
+  await sendMessage(order.chat_id, [
+    confirmationWasUncertain ? '⚠️ *Trade confirmation pending*' : '❌ *Trade failed*',
+    `Token: \`${order.mint.slice(0, 8)}...${order.mint.slice(-6)}\``,
+    `Reason: ${humanizeExecutionError(finalMessage)}`,
+    `Tried: \`${MAX_ORDER_ATTEMPTS} attempts\``
+  ].join('\n'));
+
+  if (registerFailure(`order:${order.user_id}`)) {
+    await sendMessage(order.chat_id, 'Alert: multiple order failures detected recently. Review settings, wallet balance, and RPC/Jupiter health.');
+  }
+  logger.error('order_failed', { orderId: order.id, status: finalStatus, message: finalMessage });
+
+  return true;
+}
+
+async function processNextOrderOnce() {
   const order = await claimNextOrder();
   if (!order) {
     return false;
@@ -1159,4 +1373,25 @@ export async function evaluateOpenPositions() {
 
 export async function cleanupReplayGuards() {
   await query('DELETE FROM signal_replay_guard WHERE expires_at < NOW()');
+}
+
+export async function reconcileConfirmedSellPositions() {
+  const result = await query<{ id: string }>(
+    `
+    UPDATE positions p
+    SET status = 'CLOSED', updated_at = NOW(), closed_at = COALESCE(p.closed_at, eo.updated_at)
+    FROM execution_orders eo
+    WHERE p.user_id = eo.user_id
+      AND p.mint = eo.mint
+      AND p.status = 'CLOSING'
+      AND eo.side = 'SELL'
+      AND eo.status = 'CONFIRMED'
+      AND eo.updated_at >= p.updated_at - INTERVAL '10 minutes'
+    RETURNING p.id
+    `
+  );
+
+  if (result.rowCount) {
+    logger.info('positions_reconciled_from_confirmed_sells', { count: result.rowCount });
+  }
 }

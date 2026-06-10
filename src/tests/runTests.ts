@@ -232,6 +232,8 @@ async function run() {
   });
   assert.equal(buyDecision.action, 'BUY');
   assert.ok(buyDecision.score >= 70);
+  assert.equal(buyDecision.recommendedSlippageBps, 2000);
+  assert.equal(buyDecision.recommendedPriorityFeeLamports, 1_000_000);
 
   const skipDecision = decideLaunch({
     liquiditySol: 3,
