@@ -607,7 +607,7 @@ async function closePositionFromSell(order: OrderRow) {
     WHERE id = (
       SELECT id
       FROM positions
-      WHERE user_id = $1 AND mint = $2 AND status = 'OPEN'
+      WHERE user_id = $1 AND mint = $2 AND status IN ('OPEN', 'CLOSING')
       ORDER BY opened_at
       LIMIT 1
     )
