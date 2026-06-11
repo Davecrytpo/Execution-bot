@@ -22,9 +22,13 @@ Add these in the Space settings under repository secrets:
 - `HELIUS_GATEKEEPER_RPC_URL`
 - `ALCHEMY_RPC_URL`
 - `JUPITER_API_KEY`
-- `TELEGRAM_WEBHOOK_URL`
 
-Set `TELEGRAM_WEBHOOK_URL` to:
+The Docker deployment defaults to Telegram polling with `TELEGRAM_USE_WEBHOOK=false`.
+This is the safer mode for a private Hugging Face Space because Telegram does not need
+to reach the Space over a public webhook URL.
+
+If you make the Space public and want webhook mode instead, add `TELEGRAM_USE_WEBHOOK=true`
+and set `TELEGRAM_WEBHOOK_URL` to:
 
 ```text
 https://YOUR-USERNAME-execution-bot.hf.space/api/telegram/webhook
@@ -65,4 +69,5 @@ https://YOUR-USERNAME-execution-bot.hf.space/health
 
 ## Telegram Webhook
 
-The app sets the Telegram webhook automatically on startup when `TELEGRAM_WEBHOOK_URL` is set.
+Webhook mode is optional. In the default polling mode, the bot process receives Telegram
+updates directly and no webhook setup is required.
