@@ -2,6 +2,7 @@ import { fileURLToPath } from 'node:url';
 import { config } from '../config.js';
 import { getMetricsSnapshot } from '../lib/metrics.js';
 import { logger } from '../lib/logger.js';
+import { waitIfRenderRuntimeDisabled } from '../lib/renderGuard.js';
 import {
   cleanupReplayGuards,
   evaluateOpenPositions,
@@ -11,6 +12,10 @@ import {
 } from '../services/executionService.js';
 
 export async function startMonitorWorker(signal?: AbortSignal) {
+  if (await waitIfRenderRuntimeDisabled('monitor_worker', signal)) {
+    return;
+  }
+
   while (!signal?.aborted) {
     try {
       await scanDeposits();

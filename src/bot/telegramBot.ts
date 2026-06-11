@@ -34,6 +34,7 @@ import {
 } from '../services/custodyService.js';
 import { enqueueManualTradeForUser } from '../services/executionService.js';
 import { logger } from '../lib/logger.js';
+import { waitIfRenderRuntimeDisabled } from '../lib/renderGuard.js';
 import { logAuditAction } from '../lib/audit.js';
 import { query } from '../lib/db.js';
 import { isValidPositiveSolAmount } from './wizardLogic.js';
@@ -2086,6 +2087,10 @@ export async function handleIncomingUpdate(update: TelegramUpdate) {
 }
 
 export async function startTelegramBot(signal?: AbortSignal) {
+  if (await waitIfRenderRuntimeDisabled('telegram_bot', signal)) {
+    return;
+  }
+
   const mode = config.telegramWebhookUrl ? 'webhook' : 'polling';
   markTelegramStarting(mode);
 

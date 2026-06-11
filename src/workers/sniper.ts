@@ -1,5 +1,6 @@
 import { fileURLToPath } from 'node:url';
 import { logger } from '../lib/logger.js';
+import { waitIfRenderRuntimeDisabled } from '../lib/renderGuard.js';
 import { SniperService } from '../sniper/service.js';
 import {
   markSniperWorkerStarting,
@@ -7,6 +8,10 @@ import {
 } from '../sniper/runtime.js';
 
 export async function startSniperWorker(signal?: AbortSignal) {
+  if (await waitIfRenderRuntimeDisabled('sniper_worker', signal)) {
+    return;
+  }
+
   markSniperWorkerStarting();
   const service = new SniperService();
   if (signal) {

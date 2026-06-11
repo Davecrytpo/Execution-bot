@@ -1,9 +1,14 @@
 import { fileURLToPath } from 'node:url';
 import { config } from '../config.js';
 import { logger } from '../lib/logger.js';
+import { waitIfRenderRuntimeDisabled } from '../lib/renderGuard.js';
 import { processNextOrder } from '../services/executionService.js';
 
 export async function startExecutorWorker(signal?: AbortSignal) {
+  if (await waitIfRenderRuntimeDisabled('executor_worker', signal)) {
+    return;
+  }
+
   while (!signal?.aborted) {
     try {
       const processed = await processNextOrder();
