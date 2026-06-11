@@ -1,6 +1,8 @@
-FROM node:20-alpine
+FROM node:20-bookworm-slim
 
-RUN apk add --no-cache python3 make g++
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends python3 make g++ ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
