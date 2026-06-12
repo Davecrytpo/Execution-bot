@@ -21,6 +21,7 @@ import {
   deriveBondingCurveAddress,
   extractActorFromParsedTransaction,
   extractMintFromParsedTransaction,
+  extractMintFromInstruction,
   extractTradeFlow,
   getPumpEventKindFromLogs,
   LAMPORTS_PER_SOL,
@@ -767,15 +768,12 @@ export class SniperService {
       const programId = 'programId' in instruction
         ? instruction.programId.toBase58()
         : '';
-      const accounts = 'accounts' in instruction
-        ? instruction.accounts
-        : [];
 
-      if (programId !== config.pumpProgramId || !accounts.length) {
+      if (programId !== config.pumpProgramId) {
         continue;
       }
 
-      const candidate = accounts[0]?.toBase58();
+      const candidate = extractMintFromInstruction(instruction);
       if (candidate && isResolvablePumpMint(candidate)) {
         return candidate;
       }

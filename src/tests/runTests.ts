@@ -233,7 +233,19 @@ async function run() {
   const createTx = {
     transaction: {
       message: {
-        instructions: []
+        instructions: [
+          {
+            programId: {
+              toBase58: () => '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P'
+            },
+            parsed: {
+              type: 'create',
+              info: {
+                mint: 'TOKEN_MINT'
+              }
+            }
+          }
+        ]
       }
     },
     meta: {

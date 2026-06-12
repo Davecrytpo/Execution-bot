@@ -132,6 +132,33 @@ function getMintFromParsedInstruction(instruction: unknown) {
   return typeof mint === 'string' && mint !== SOL_MINT ? mint : null;
 }
 
+export function extractMintFromInstruction(instruction: unknown) {
+  if (!instruction || typeof instruction !== 'object') {
+    return null;
+  }
+
+  const parsedMint = getMintFromParsedInstruction(instruction);
+  if (parsedMint) {
+    return parsedMint;
+  }
+
+  const rawInstruction = instruction as {
+    accounts?: unknown[];
+  };
+
+  const candidate = rawInstruction.accounts?.[0];
+  if (typeof candidate === 'string' && candidate !== SOL_MINT) {
+    return candidate;
+  }
+  if (candidate && typeof candidate === 'object' && 'toBase58' in candidate) {
+    const pubkey = candidate as { toBase58: () => string };
+    const value = pubkey.toBase58();
+    return value !== SOL_MINT ? value : null;
+  }
+
+  return null;
+}
+
 export function deriveBondingCurveAddress(mint: string, programId: string) {
   return PublicKey.findProgramAddressSync(
     [Buffer.from('bonding-curve'), new PublicKey(mint).toBuffer()],
