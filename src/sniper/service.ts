@@ -714,8 +714,8 @@ export class SniperService {
     }
 
     const direct = extractMintFromParsedTransaction(tx, eventKind);
-    if (direct && isResolvablePumpMint(direct) && (eventKind !== 'create' || await this.isValidCreateMintCandidate(direct))) {
-      logger.info('sniper_create_mint_resolved', {
+    if (direct && isResolvablePumpMint(direct)) {
+      logger.info(eventKind === 'create' ? 'sniper_create_mint_resolved' : 'sniper_mint_resolved', {
         mint: direct,
         method: 'token_balances'
       });
@@ -746,13 +746,11 @@ export class SniperService {
         continue;
       }
 
-      if (await this.isValidCreateMintCandidate(candidate)) {
-        logger.info('sniper_create_mint_resolved', {
-          mint: candidate,
-          method: 'account_scan'
-        });
-        return candidate;
-      }
+      logger.info('sniper_create_mint_resolved', {
+        mint: candidate,
+        method: 'account_scan'
+      });
+      return candidate;
     }
 
     if (eventKind === 'create') {
