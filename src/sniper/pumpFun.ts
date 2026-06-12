@@ -234,6 +234,14 @@ export function extractMintFromParsedTransaction(
   }
 
   if (eventKind === 'create') {
+    const mintedCandidate = entries
+      .filter(([, delta]) => delta > 0n)
+      .sort((left, right) => Number(absoluteBigInt(right[1]) - absoluteBigInt(left[1])))[0]?.[0];
+
+    if (mintedCandidate) {
+      return mintedCandidate;
+    }
+
     const postMints = (tx.meta?.postTokenBalances ?? [])
       .map((entry) => entry.mint)
       .filter((mint) => mint !== SOL_MINT);

@@ -778,7 +778,7 @@ export class SniperService {
       }
 
       const candidate = accounts[0]?.toBase58();
-      if (candidate && isResolvablePumpMint(candidate) && await this.isValidCreateMintCandidate(candidate)) {
+      if (candidate && isResolvablePumpMint(candidate)) {
         return candidate;
       }
       if (candidate) {
@@ -873,6 +873,42 @@ export class SniperService {
       value
     });
     return value;
+  }
+
+  private async fetchLaunchSnapshotWithRetry(
+    mint: string,
+    creatorWallet: string | null,
+    bondingCurve: string,
+    attempts = 4
+  ) {
+    let lastError: unknown = null;
+
+    for (let attempt = 1; attempt <= attempts; attempt += 1) {
+      try {
+        return await this.fetchLaunchSnapshot(mint, creatorWallet, bondingCurve);
+      } catch (error: any) {
+        lastError = error;
+        const retriableMessage = String(error?.message ?? '').toLowerCase();
+        const retriable = retriableMessage.includes('missing')
+          || retriableMessage.includes('not found')
+          || retriableMessage.includes('invalid_bonding_curve_state')
+          || retriableMessage.includes('account not found');
+
+        if (!retriable || attempt === attempts) {
+          break;
+        }
+
+        logger.info('sniper_launch_snapshot_retry', {
+          mint,
+          attempt,
+          attempts,
+          message: error.message
+        });
+        await wait(1000 * attempt);
+      }
+    }
+
+    throw lastError instanceof Error ? lastError : new Error('launch_snapshot_unavailable');
   }
 
   private async fetchGlobalState() {
@@ -1099,7 +1135,7 @@ export class SniperService {
 
     const creatorWallet = params.actorWallet;
     const bondingCurve = deriveBondingCurveAddress(params.mint, config.pumpProgramId);
-    const launchSnapshot = await this.fetchLaunchSnapshot(params.mint, creatorWallet, bondingCurve);
+    const launchSnapshot = await this.fetchLaunchSnapshotWithRetry(params.mint, creatorWallet, bondingCurve);
     const metrics = computeBondingCurveMetrics({
       curveState: launchSnapshot.curveState,
       globalState: this.globalState,

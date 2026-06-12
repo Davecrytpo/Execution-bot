@@ -11,6 +11,10 @@ function writeU64(buffer: Buffer, offset: number, value: bigint) {
 }
 
 async function run() {
+  process.env.HELIUS_RPC_URL = ' https://mainnet.helius-\n  rpc.com/?api-key=test-key ';
+  process.env.HELIUS_RPC_URLS = ' https://mainnet.helius-\n  rpc.com/?api-key=test-key , https://mainnet.helius-rpc.com/?api-key=other-key ';
+
+  const { config } = await import('../config.js');
   const { encryptSecret, decryptSecret } = await import('../lib/crypto.js');
   const { normalizeDatabaseUrl, resolveDatabaseSsl } = await import('../lib/db.js');
   const { sanitizeForLog } = await import('../lib/logger.js');
@@ -31,6 +35,7 @@ async function run() {
     computeBondingCurveMetrics,
     decodeBondingCurveState,
     decodePumpGlobalState,
+    extractMintFromParsedTransaction,
     getPumpEventKindFromLogs
   } = await import('../sniper/pumpFun.js');
   const { decideLaunch } = await import('../sniper/scoring.js');
@@ -97,6 +102,12 @@ async function run() {
   assert.equal(isJupiterRouteUnavailableError('{"errorCode":"TOKEN_NOT_TRADABLE"}'), true);
   assert.equal(isJupiterRouteUnavailableError('Could not find any route'), true);
   assert.equal(isJupiterRouteUnavailableError('rate limit'), false);
+  assert.equal(config.heliusRpcUrl, 'https://mainnet.helius-rpc.com/?api-key=test-key');
+  assert.deepEqual(config.heliusRpcUrls, [
+    'https://mainnet.helius-rpc.com/?api-key=test-key',
+    'https://mainnet.helius-rpc.com/?api-key=other-key',
+    'https://api.mainnet-beta.solana.com'
+  ]);
 
   assert.equal(isValidPositiveSolAmount('0.1'), true);
   assert.equal(isValidPositiveSolAmount('0'), false);
@@ -218,6 +229,40 @@ async function run() {
   assert.ok(metrics.liquiditySol >= 15);
   assert.equal(getPumpEventKindFromLogs(['Program log: Instruction: Buy']), 'buy');
   assert.equal(getPumpEventKindFromLogs(['Program log: Instruction: Create']), 'create');
+
+  const createTx = {
+    meta: {
+      preTokenBalances: [
+        {
+          accountIndex: 0,
+          mint: 'TOKEN_MINT',
+          owner: 'creator',
+          uiTokenAmount: { amount: '0' }
+        },
+        {
+          accountIndex: 1,
+          mint: 'USDC_MINT',
+          owner: 'payer',
+          uiTokenAmount: { amount: '0' }
+        }
+      ],
+      postTokenBalances: [
+        {
+          accountIndex: 0,
+          mint: 'TOKEN_MINT',
+          owner: 'creator',
+          uiTokenAmount: { amount: '1000000' }
+        },
+        {
+          accountIndex: 1,
+          mint: 'USDC_MINT',
+          owner: 'payer',
+          uiTokenAmount: { amount: '2500' }
+        }
+      ]
+    }
+  } as any;
+  assert.equal(extractMintFromParsedTransaction(createTx, 'create'), 'TOKEN_MINT');
 
   const buyDecision = decideLaunch({
     liquiditySol: 16,

@@ -20,10 +20,15 @@ function optional(value: string | undefined) {
   return normalized ? normalized : '';
 }
 
+function normalizeUrlValue(value: string | undefined) {
+  const normalized = optional(value).replace(/\s+/g, '');
+  return normalized ? normalized : '';
+}
+
 function optionalList(value: string | undefined) {
   return optional(value)
     .split(',')
-    .map((item) => item.trim())
+    .map((item) => item.trim().replace(/\s+/g, ''))
     .filter(Boolean);
 }
 
@@ -108,31 +113,31 @@ function deriveTelegramWebhookUrl() {
 export const config = {
   port: toNumber(process.env.PORT, 3100, 1),
   databaseUrl: required('DATABASE_URL', process.env.DATABASE_URL),
-  solanaRpc: required('SOLANA_RPC', firstConfigured(process.env.SOLANA_RPC ?? '', optional(process.env.HELIUS_RPC_URL), optionalList(process.env.HELIUS_RPC_URLS)[0] ?? 'https://api.mainnet-beta.solana.com')),
-  heliusRpcUrl: required('HELIUS_RPC_URL', firstConfigured(optional(process.env.HELIUS_RPC_URL), optionalList(process.env.HELIUS_RPC_URLS)[0], optional(process.env.SOLANA_RPC), 'https://api.mainnet-beta.solana.com')),
+  solanaRpc: required('SOLANA_RPC', firstConfigured(normalizeUrlValue(process.env.SOLANA_RPC), normalizeUrlValue(process.env.HELIUS_RPC_URL), optionalList(process.env.HELIUS_RPC_URLS)[0] ?? 'https://api.mainnet-beta.solana.com')),
+  heliusRpcUrl: required('HELIUS_RPC_URL', firstConfigured(normalizeUrlValue(process.env.HELIUS_RPC_URL), optionalList(process.env.HELIUS_RPC_URLS)[0], normalizeUrlValue(process.env.SOLANA_RPC), 'https://api.mainnet-beta.solana.com')),
   heliusRpcUrls: Array.from(new Set([
     ...optionalList(process.env.HELIUS_RPC_URLS),
-    optional(process.env.HELIUS_RPC_URL),
-    optional(process.env.SOLANA_RPC)
+    normalizeUrlValue(process.env.HELIUS_RPC_URL),
+    normalizeUrlValue(process.env.SOLANA_RPC)
   ].filter(Boolean))),
-  heliusWsUrl: optional(process.env.HELIUS_WS_URL),
+  heliusWsUrl: normalizeUrlValue(process.env.HELIUS_WS_URL),
   heliusWsUrls: Array.from(new Set([
     ...optionalList(process.env.HELIUS_WS_URLS),
-    optional(process.env.HELIUS_WS_URL),
+    normalizeUrlValue(process.env.HELIUS_WS_URL),
     ...optionalList(process.env.HELIUS_RPC_URLS).map(deriveWsUrl),
-    deriveWsUrl(optional(process.env.HELIUS_RPC_URL))
+    deriveWsUrl(normalizeUrlValue(process.env.HELIUS_RPC_URL))
   ].filter(Boolean))),
   sniperWsUrls: supportedSniperWsUrls(
     ...optionalList(process.env.SNIPER_WS_URLS),
-    optional(process.env.SNIPER_WS_URL),
+    normalizeUrlValue(process.env.SNIPER_WS_URL),
     ...optionalList(process.env.HELIUS_WS_URLS),
-    optional(process.env.HELIUS_WS_URL),
+    normalizeUrlValue(process.env.HELIUS_WS_URL),
     ...optionalList(process.env.HELIUS_RPC_URLS).map(deriveWsUrl),
-    deriveWsUrl(optional(process.env.HELIUS_RPC_URL))
+    deriveWsUrl(normalizeUrlValue(process.env.HELIUS_RPC_URL))
   ),
-  heliusGatekeeperRpcUrl: optional(process.env.HELIUS_GATEKEEPER_RPC_URL),
-  alchemyRpcUrl: optional(process.env.ALCHEMY_RPC_URL),
-  alchemyWsUrl: optional(process.env.ALCHEMY_WS_URL) || deriveAlchemyWsUrl(optional(process.env.ALCHEMY_RPC_URL)),
+  heliusGatekeeperRpcUrl: normalizeUrlValue(process.env.HELIUS_GATEKEEPER_RPC_URL),
+  alchemyRpcUrl: normalizeUrlValue(process.env.ALCHEMY_RPC_URL),
+  alchemyWsUrl: normalizeUrlValue(process.env.ALCHEMY_WS_URL) || deriveAlchemyWsUrl(normalizeUrlValue(process.env.ALCHEMY_RPC_URL)),
   telegramBotToken: required('TELEGRAM_BOT_TOKEN', process.env.TELEGRAM_BOT_TOKEN),
   apiSharedSecret: required('API_SHARED_SECRET', process.env.API_SHARED_SECRET),
   custodyMasterKey: required('CUSTODY_MASTER_KEY', process.env.CUSTODY_MASTER_KEY),
