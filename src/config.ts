@@ -27,6 +27,10 @@ function optionalList(value: string | undefined) {
     .filter(Boolean);
 }
 
+function firstConfigured(...values: string[]) {
+  return values.find(Boolean) ?? '';
+}
+
 function toBoolean(value: string | undefined, fallback: boolean) {
   if (value === undefined) {
     return fallback;
@@ -104,13 +108,26 @@ function deriveTelegramWebhookUrl() {
 export const config = {
   port: toNumber(process.env.PORT, 3100, 1),
   databaseUrl: required('DATABASE_URL', process.env.DATABASE_URL),
-  solanaRpc: required('SOLANA_RPC', process.env.SOLANA_RPC ?? process.env.HELIUS_RPC_URL ?? 'https://api.mainnet-beta.solana.com'),
-  heliusRpcUrl: required('HELIUS_RPC_URL', process.env.HELIUS_RPC_URL ?? process.env.SOLANA_RPC ?? 'https://api.mainnet-beta.solana.com'),
+  solanaRpc: required('SOLANA_RPC', firstConfigured(process.env.SOLANA_RPC ?? '', optional(process.env.HELIUS_RPC_URL), optionalList(process.env.HELIUS_RPC_URLS)[0] ?? 'https://api.mainnet-beta.solana.com')),
+  heliusRpcUrl: required('HELIUS_RPC_URL', firstConfigured(optional(process.env.HELIUS_RPC_URL), optionalList(process.env.HELIUS_RPC_URLS)[0], optional(process.env.SOLANA_RPC), 'https://api.mainnet-beta.solana.com')),
+  heliusRpcUrls: Array.from(new Set([
+    ...optionalList(process.env.HELIUS_RPC_URLS),
+    optional(process.env.HELIUS_RPC_URL),
+    optional(process.env.SOLANA_RPC)
+  ].filter(Boolean))),
   heliusWsUrl: optional(process.env.HELIUS_WS_URL),
+  heliusWsUrls: Array.from(new Set([
+    ...optionalList(process.env.HELIUS_WS_URLS),
+    optional(process.env.HELIUS_WS_URL),
+    ...optionalList(process.env.HELIUS_RPC_URLS).map(deriveWsUrl),
+    deriveWsUrl(optional(process.env.HELIUS_RPC_URL))
+  ].filter(Boolean))),
   sniperWsUrls: supportedSniperWsUrls(
     ...optionalList(process.env.SNIPER_WS_URLS),
     optional(process.env.SNIPER_WS_URL),
+    ...optionalList(process.env.HELIUS_WS_URLS),
     optional(process.env.HELIUS_WS_URL),
+    ...optionalList(process.env.HELIUS_RPC_URLS).map(deriveWsUrl),
     deriveWsUrl(optional(process.env.HELIUS_RPC_URL))
   ),
   heliusGatekeeperRpcUrl: optional(process.env.HELIUS_GATEKEEPER_RPC_URL),

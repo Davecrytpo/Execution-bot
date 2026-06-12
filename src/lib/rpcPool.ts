@@ -9,7 +9,7 @@ import { config } from '../config.js';
 import { logger } from './logger.js';
 import { fetchJson } from './http.js';
 
-type RpcEndpointName = 'primary' | 'gatekeeper' | 'backup';
+type RpcEndpointName = string;
 
 type RpcEndpoint = {
   name: RpcEndpointName;
@@ -46,10 +46,16 @@ function uniqueEndpoints(endpoints: Array<Omit<RpcEndpoint, 'connection'>>) {
 }
 
 function buildEndpoints(): RpcEndpoint[] {
+  const heliusEndpoints = config.heliusRpcUrls.map((url, index) => ({
+    name: index === 0 ? 'primary' : `helius_${index + 1}`,
+    url,
+    rank: index
+  }));
+
   return uniqueEndpoints([
-    { name: 'primary', url: config.heliusRpcUrl, rank: 0 },
-    { name: 'gatekeeper', url: config.heliusGatekeeperRpcUrl, rank: 1 },
-    { name: 'backup', url: config.alchemyRpcUrl, rank: 2 }
+    ...heliusEndpoints,
+    { name: 'gatekeeper', url: config.heliusGatekeeperRpcUrl, rank: heliusEndpoints.length + 1 },
+    { name: 'backup', url: config.alchemyRpcUrl, rank: heliusEndpoints.length + 2 }
   ]).map((endpoint) => ({
     ...endpoint,
     connection: new Connection(endpoint.url, {

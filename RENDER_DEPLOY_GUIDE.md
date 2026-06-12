@@ -38,7 +38,9 @@ You will be prompted to enter or manually add these values:
 - `CUSTODY_MASTER_KEY`
 - `SOLANA_RPC`
 - `HELIUS_RPC_URL`
+- `HELIUS_RPC_URLS` if you want a comma-separated Helius RPC failover list
 - `HELIUS_WS_URL`
+- `HELIUS_WS_URLS` if you want a comma-separated Helius websocket failover list
 - `SNIPER_WS_URL` if the sniper websocket is different from `HELIUS_WS_URL`
 - `SNIPER_WS_URLS` if you want a comma-separated sniper websocket failover list
 - `HELIUS_GATEKEEPER_RPC_URL`

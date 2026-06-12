@@ -18,7 +18,9 @@ Add these in the Space settings under repository secrets:
 - `API_SHARED_SECRET`
 - `CUSTODY_MASTER_KEY`
 - `HELIUS_RPC_URL`
+- `HELIUS_RPC_URLS` - optional comma-separated Helius RPC failover list
 - `HELIUS_WS_URL` - required for the pump.fun sniper unless `SNIPER_WS_URL` is set. Do not replace this with Alchemy WS; Alchemy returns `Method 'logsSubscribe' not found`.
+- `HELIUS_WS_URLS` - optional comma-separated Helius websocket failover list
 - `HELIUS_GATEKEEPER_RPC_URL`
 - `ALCHEMY_RPC_URL`
 - `JUPITER_API_KEY`

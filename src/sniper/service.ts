@@ -162,6 +162,14 @@ function isResolvablePumpMint(mint: string) {
   return Boolean(mint) && mint !== SOL_MINT;
 }
 
+function decodeBondingCurveCandidate(data: Buffer) {
+  try {
+    return decodeBondingCurveState(data);
+  } catch {
+    return null;
+  }
+}
+
 export class SniperService {
   private readonly websocketUrls = config.sniperWsUrls;
   private ws: WebSocket | null = null;
@@ -181,6 +189,8 @@ export class SniperService {
   private logQueueRunning = false;
   private lastLogProcessedAt = 0;
   private lastCreateQueuedAt = 0;
+  private readonly mintValidationCache = new Map<string, { expiresAt: number; value: boolean }>();
+  private readonly createCandidateCache = new Map<string, { expiresAt: number; value: boolean }>();
   private globalState: PumpGlobalState | null = null;
   private logsSubscriptionId: number | null = null;
   private stopping = false;
@@ -782,6 +792,11 @@ export class SniperService {
   }
 
   private async isTokenMint(address: string) {
+    const cached = this.mintValidationCache.get(address);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.value;
+    }
+
     try {
       const info = await rpcPool.withConnection(
         (connection) => connection.getParsedAccountInfo(new PublicKey(address), 'confirmed'),
@@ -797,21 +812,43 @@ export class SniperService {
       } | Buffer | undefined;
 
       if (!info.value || info.value.owner.toBase58() !== TOKEN_PROGRAM_ID || !data || Buffer.isBuffer(data)) {
+        this.mintValidationCache.set(address, {
+          expiresAt: Date.now() + 15 * 60_000,
+          value: false
+        });
         return false;
       }
 
-      return data.parsed?.type === 'mint' && typeof data.parsed.info?.decimals === 'number';
+      const value = data.parsed?.type === 'mint' && typeof data.parsed.info?.decimals === 'number';
+      this.mintValidationCache.set(address, {
+        expiresAt: Date.now() + 15 * 60_000,
+        value
+      });
+      return value;
     } catch (error: any) {
       logger.error('sniper_mint_validation_failed', {
         address,
         message: error.message
+      });
+      this.mintValidationCache.set(address, {
+        expiresAt: Date.now() + 60_000,
+        value: false
       });
       return false;
     }
   }
 
   private async isValidCreateMintCandidate(mint: string) {
+    const cached = this.createCandidateCache.get(mint);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.value;
+    }
+
     if (!isResolvablePumpMint(mint)) {
+      this.createCandidateCache.set(mint, {
+        expiresAt: Date.now() + 15 * 60_000,
+        value: false
+      });
       return false;
     }
 
@@ -821,11 +858,21 @@ export class SniperService {
       { preferPrimary: false }
     ).catch(() => null);
 
-    if (!bondingCurveInfo?.data) {
+    const curveState = bondingCurveInfo?.data ? decodeBondingCurveCandidate(Buffer.from(bondingCurveInfo.data)) : null;
+    if (!bondingCurveInfo?.data || bondingCurveInfo.owner.toBase58() !== config.pumpProgramId || !curveState) {
+      this.createCandidateCache.set(mint, {
+        expiresAt: Date.now() + 5 * 60_000,
+        value: false
+      });
       return false;
     }
 
-    return this.isTokenMint(mint);
+    const value = await this.isTokenMint(mint);
+    this.createCandidateCache.set(mint, {
+      expiresAt: Date.now() + 15 * 60_000,
+      value
+    });
+    return value;
   }
 
   private async fetchGlobalState() {

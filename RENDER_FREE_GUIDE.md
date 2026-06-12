@@ -49,7 +49,9 @@ Migration should run in the Render build command, not in the start command. This
 - `CUSTODY_MASTER_KEY`
 - `SOLANA_RPC`
 - `HELIUS_RPC_URL`
+- `HELIUS_RPC_URLS` optional comma-separated Helius RPC failover list
 - `HELIUS_WS_URL` or `SNIPER_WS_URL` for the sniper websocket
+- `HELIUS_WS_URLS` optional comma-separated Helius websocket failover list
 - `HELIUS_GATEKEEPER_RPC_URL`
 - `ALCHEMY_RPC_URL`
 - `ALCHEMY_WS_URL`

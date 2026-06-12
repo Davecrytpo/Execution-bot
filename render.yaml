@@ -20,7 +20,11 @@ services:
         sync: false
       - key: HELIUS_RPC_URL
         sync: false
+      - key: HELIUS_RPC_URLS
+        sync: false
       - key: HELIUS_WS_URL
+        sync: false
+      - key: HELIUS_WS_URLS
         sync: false
       - key: SNIPER_WS_URL
         sync: false
@@ -134,11 +138,21 @@ services:
           type: web
           name: solana-telegram-execution-api
           envVarKey: HELIUS_RPC_URL
+      - key: HELIUS_RPC_URLS
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: HELIUS_RPC_URLS
       - key: HELIUS_WS_URL
         fromService:
           type: web
           name: solana-telegram-execution-api
           envVarKey: HELIUS_WS_URL
+      - key: HELIUS_WS_URLS
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: HELIUS_WS_URLS
       - key: SNIPER_WS_URL
         fromService:
           type: web
@@ -362,11 +376,21 @@ services:
           type: web
           name: solana-telegram-execution-api
           envVarKey: HELIUS_RPC_URL
+      - key: HELIUS_RPC_URLS
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: HELIUS_RPC_URLS
       - key: HELIUS_WS_URL
         fromService:
           type: web
           name: solana-telegram-execution-api
           envVarKey: HELIUS_WS_URL
+      - key: HELIUS_WS_URLS
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: HELIUS_WS_URLS
       - key: SNIPER_WS_URL
         fromService:
           type: web
@@ -590,11 +614,21 @@ services:
           type: web
           name: solana-telegram-execution-api
           envVarKey: HELIUS_RPC_URL
+      - key: HELIUS_RPC_URLS
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: HELIUS_RPC_URLS
       - key: HELIUS_WS_URL
         fromService:
           type: web
           name: solana-telegram-execution-api
           envVarKey: HELIUS_WS_URL
+      - key: HELIUS_WS_URLS
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: HELIUS_WS_URLS
       - key: SNIPER_WS_URL
         fromService:
           type: web
@@ -818,11 +852,21 @@ services:
           type: web
           name: solana-telegram-execution-api
           envVarKey: HELIUS_RPC_URL
+      - key: HELIUS_RPC_URLS
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: HELIUS_RPC_URLS
       - key: HELIUS_WS_URL
         fromService:
           type: web
           name: solana-telegram-execution-api
           envVarKey: HELIUS_WS_URL
+      - key: HELIUS_WS_URLS
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: HELIUS_WS_URLS
       - key: SNIPER_WS_URL
         fromService:
           type: web
