@@ -1,7 +1,7 @@
 FROM node:20-bookworm-slim
 
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends python3 make g++ ca-certificates \
+  && apt-get install -y --no-install-recommends git python3 make g++ ca-certificates \
   && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -10,6 +10,8 @@ COPY package*.json ./
 RUN npm ci
 
 COPY . .
+RUN REVISION="$(git rev-parse --short=12 HEAD 2>/dev/null || true)" \
+  && printf '%s\n' "${REVISION:-unknown}" > .build-revision
 RUN npm run build
 RUN npm prune --omit=dev
 

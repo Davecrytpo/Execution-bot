@@ -1,13 +1,18 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 
-function readGitHead(repoRoot: string) {
-  const headPath = join(repoRoot, '.git', 'HEAD');
-  if (!existsSync(headPath)) {
+function readTrimmedFile(path: string) {
+  if (!existsSync(path)) {
     return null;
   }
 
-  const head = readFileSync(headPath, 'utf8').trim();
+  const value = readFileSync(path, 'utf8').trim();
+  return value || null;
+}
+
+function readGitHead(repoRoot: string) {
+  const headPath = join(repoRoot, '.git', 'HEAD');
+  const head = readTrimmedFile(headPath);
   if (!head) {
     return null;
   }
@@ -45,6 +50,7 @@ function readGitHead(repoRoot: string) {
 export function getBuildInfo() {
   const repoRoot = process.cwd();
   const revision = process.env.APP_BUILD_REVISION
+    ?? readTrimmedFile(join(repoRoot, '.build-revision'))
     ?? readGitHead(repoRoot)
     ?? 'unknown';
 
