@@ -1375,7 +1375,8 @@ export async function evaluateOpenPositions() {
         continue;
       }
 
-      const signalKey = `exit:${position.id}:${shouldTakeProfit ? 'tp' : 'sl'}`;
+      const retryBucket = Math.floor(Date.now() / (10 * 60 * 1000));
+      const signalKey = `exit:${position.id}:${shouldTakeProfit ? 'tp' : 'sl'}:${retryBucket}`;
       const signalResult = await query<{ id: string }>(
         `
         INSERT INTO execution_signals (signal_key, mint, source, side, score, payload, status)
@@ -1435,6 +1436,40 @@ export async function evaluateOpenPositions() {
 
 export async function cleanupReplayGuards() {
   await query('DELETE FROM signal_replay_guard WHERE expires_at < NOW()');
+}
+
+export async function recoverStaleClosingPositions() {
+  const result = await query<{ id: string }>(
+    `
+    UPDATE positions p
+    SET status = 'OPEN', updated_at = NOW()
+    WHERE p.status = 'CLOSING'
+      AND p.updated_at < NOW() - INTERVAL '10 minutes'
+      AND NOT EXISTS (
+        SELECT 1
+        FROM execution_orders eo
+        WHERE eo.user_id = p.user_id
+          AND eo.mint = p.mint
+          AND eo.side = 'SELL'
+          AND eo.status = 'CONFIRMED'
+          AND eo.updated_at >= p.updated_at - INTERVAL '10 minutes'
+      )
+      AND NOT EXISTS (
+        SELECT 1
+        FROM execution_orders eo
+        WHERE eo.user_id = p.user_id
+          AND eo.mint = p.mint
+          AND eo.side = 'SELL'
+          AND eo.status IN ('QUEUED', 'PROCESSING')
+          AND eo.updated_at >= NOW() - INTERVAL '10 minutes'
+      )
+    RETURNING p.id
+    `
+  );
+
+  if (result.rowCount) {
+    logger.info('positions_reopened_after_stale_close', { count: result.rowCount });
+  }
 }
 
 export async function reconcileConfirmedSellPositions() {

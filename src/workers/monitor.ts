@@ -7,6 +7,7 @@ import {
   cleanupReplayGuards,
   evaluateOpenPositions,
   processNextWithdrawal,
+  recoverStaleClosingPositions,
   reconcileConfirmedSellPositions,
   scanDeposits
 } from '../services/executionService.js';
@@ -20,6 +21,7 @@ export async function startMonitorWorker(signal?: AbortSignal) {
     try {
       await scanDeposits();
       await reconcileConfirmedSellPositions();
+      await recoverStaleClosingPositions();
       await evaluateOpenPositions();
       await processNextWithdrawal();
       await cleanupReplayGuards();
