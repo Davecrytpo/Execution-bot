@@ -183,7 +183,7 @@ export class SniperService {
 
   async start() {
     if (!this.websocketUrls.length) {
-      throw new Error('SNIPER_WS_URL_or_HELIUS_WS_URL_required_for_sniper_logs');
+      throw new Error('SNIPER_WS_URL_or_HELIUS_WS_URL_required_for_sniper_logs_alchemy_ws_not_supported');
     }
 
     this.globalState = await this.fetchGlobalState().catch((error: any) => {
