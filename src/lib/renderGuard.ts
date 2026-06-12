@@ -17,6 +17,10 @@ export async function waitIfRenderRuntimeDisabled(component: string, signal?: Ab
     return false;
   }
 
+  if (!isEnabled(process.env.DISABLE_RENDER_RUNTIME)) {
+    return false;
+  }
+
   const componentOverride = componentOverrideName(component);
   if (isEnabled(process.env.ALLOW_RENDER_RUNTIME) || isEnabled(process.env[componentOverride])) {
     return false;

@@ -18,7 +18,7 @@ Add these in the Space settings under repository secrets:
 - `API_SHARED_SECRET`
 - `CUSTODY_MASTER_KEY`
 - `HELIUS_RPC_URL`
-- `HELIUS_WS_URL`
+- `HELIUS_WS_URL` - required for the pump.fun sniper unless `SNIPER_WS_URL` is set. Do not replace this with Alchemy WS; Alchemy returns `Method 'logsSubscribe' not found`.
 - `HELIUS_GATEKEEPER_RPC_URL`
 - `ALCHEMY_RPC_URL`
 - `JUPITER_API_KEY`
@@ -36,6 +36,7 @@ https://YOUR-USERNAME-execution-bot.hf.space/api/telegram/webhook
 
 Optional secrets:
 
+- `SNIPER_WS_URL` - override websocket for the sniper; must support Solana `logsSubscribe`.
 - `ALCHEMY_WS_URL`
 - `DATABASE_SSL`
 - `JUPITER_API_BASE_URL`

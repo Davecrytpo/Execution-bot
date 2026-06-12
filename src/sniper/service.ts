@@ -159,7 +159,7 @@ function isTradeEventKind(eventKind: PumpEventKind): eventKind is TradeEventKind
 }
 
 export class SniperService {
-  private readonly websocketUrls = [config.heliusWsUrl, config.alchemyWsUrl].filter(Boolean);
+  private readonly websocketUrls = [config.sniperWsUrl].filter(Boolean);
   private ws: WebSocket | null = null;
   private wsIndex = 0;
   private reconnectAttempts = 0;
@@ -183,7 +183,7 @@ export class SniperService {
 
   async start() {
     if (!this.websocketUrls.length) {
-      throw new Error('HELIUS_WS_URL_or_ALCHEMY_WS_URL_required');
+      throw new Error('SNIPER_WS_URL_or_HELIUS_WS_URL_required_for_sniper_logs');
     }
 
     this.globalState = await this.fetchGlobalState().catch((error: any) => {

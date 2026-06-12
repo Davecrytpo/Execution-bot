@@ -20,7 +20,7 @@ Make sure you already have:
 - A Render account connected to GitHub
 - A Neon database connection string
 - A valid Telegram bot token from BotFather
-- Helius RPC and WebSocket URLs
+- Helius RPC and a sniper WebSocket URL that supports Solana `logsSubscribe`
 - A Jupiter API key
 - A strong `CUSTODY_MASTER_KEY`
 
@@ -39,6 +39,7 @@ You will be prompted to enter or manually add these values:
 - `SOLANA_RPC`
 - `HELIUS_RPC_URL`
 - `HELIUS_WS_URL`
+- `SNIPER_WS_URL` if the sniper websocket is different from `HELIUS_WS_URL`
 - `HELIUS_GATEKEEPER_RPC_URL`
 - `ALCHEMY_RPC_URL`
 - `ALCHEMY_WS_URL`
@@ -198,9 +199,9 @@ Check:
 Check:
 
 - `HELIUS_RPC_URL`
-- `HELIUS_WS_URL`
+- `HELIUS_WS_URL` or `SNIPER_WS_URL`
 - `ALCHEMY_RPC_URL`
-- `ALCHEMY_WS_URL`
+- `ALCHEMY_WS_URL` for non-sniper websocket use only; Alchemy returns `Method 'logsSubscribe' not found` for the sniper subscription
 
 ### Admin Endpoints Return 401
 

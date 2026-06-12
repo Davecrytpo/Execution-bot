@@ -22,6 +22,8 @@ services:
         sync: false
       - key: HELIUS_WS_URL
         sync: false
+      - key: SNIPER_WS_URL
+        sync: false
       - key: HELIUS_GATEKEEPER_RPC_URL
         sync: false
       - key: ALCHEMY_RPC_URL
@@ -135,6 +137,11 @@ services:
           type: web
           name: solana-telegram-execution-api
           envVarKey: HELIUS_WS_URL
+      - key: SNIPER_WS_URL
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: SNIPER_WS_URL
       - key: HELIUS_GATEKEEPER_RPC_URL
         fromService:
           type: web
@@ -353,6 +360,11 @@ services:
           type: web
           name: solana-telegram-execution-api
           envVarKey: HELIUS_WS_URL
+      - key: SNIPER_WS_URL
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: SNIPER_WS_URL
       - key: HELIUS_GATEKEEPER_RPC_URL
         fromService:
           type: web
@@ -571,6 +583,11 @@ services:
           type: web
           name: solana-telegram-execution-api
           envVarKey: HELIUS_WS_URL
+      - key: SNIPER_WS_URL
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: SNIPER_WS_URL
       - key: HELIUS_GATEKEEPER_RPC_URL
         fromService:
           type: web
@@ -789,6 +806,11 @@ services:
           type: web
           name: solana-telegram-execution-api
           envVarKey: HELIUS_WS_URL
+      - key: SNIPER_WS_URL
+        fromService:
+          type: web
+          name: solana-telegram-execution-api
+          envVarKey: SNIPER_WS_URL
       - key: HELIUS_GATEKEEPER_RPC_URL
         fromService:
           type: web

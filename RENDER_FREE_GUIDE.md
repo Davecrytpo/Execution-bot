@@ -49,7 +49,7 @@ Migration should run in the Render build command, not in the start command. This
 - `CUSTODY_MASTER_KEY`
 - `SOLANA_RPC`
 - `HELIUS_RPC_URL`
-- `HELIUS_WS_URL`
+- `HELIUS_WS_URL` or `SNIPER_WS_URL` for the sniper websocket
 - `HELIUS_GATEKEEPER_RPC_URL`
 - `ALCHEMY_RPC_URL`
 - `ALCHEMY_WS_URL`
@@ -121,9 +121,10 @@ Add these in the Render dashboard:
 - `SOLANA_RPC=<rpc url>`
 - `HELIUS_RPC_URL=<helius rpc url>`
 - `HELIUS_WS_URL=<helius websocket url>`
+- `SNIPER_WS_URL=<websocket url that supports Solana logsSubscribe>` optional; use this if the sniper websocket is different from `HELIUS_WS_URL`
 - `HELIUS_GATEKEEPER_RPC_URL=<helius backup rpc url>`
 - `ALCHEMY_RPC_URL=<alchemy rpc url>`
-- `ALCHEMY_WS_URL=<alchemy websocket url>`
+- `ALCHEMY_WS_URL=<alchemy websocket url>` optional for non-sniper websocket use; do not use it for the sniper because Alchemy rejects `logsSubscribe`
 - `JUPITER_API_KEY=<jupiter api key>`
 - `JUPITER_API_BASE_URL=https://api.jup.ag/swap/v1`
 - `DEXSCREENER_BASE_URL=https://api.dexscreener.com/latest/dex/tokens`

@@ -35,6 +35,7 @@ async function run() {
   } = await import('../sniper/pumpFun.js');
   const { decideLaunch } = await import('../sniper/scoring.js');
   const { isJupiterRouteUnavailableError } = await import('../sniper/service.js');
+  const { waitIfRenderRuntimeDisabled } = await import('../lib/renderGuard.js');
 
   const payload = encryptSecret('secret-value');
   assert.equal(decryptSecret(payload.encrypted, payload.iv, payload.authTag), 'secret-value');
@@ -273,6 +274,32 @@ async function run() {
   });
   assert.equal(skipDecision.action, 'SKIP');
   assert.ok(skipDecision.hardRejects.length >= 5);
+
+  const previousRender = process.env.RENDER;
+  const previousDisableRenderRuntime = process.env.DISABLE_RENDER_RUNTIME;
+  const previousAllowRenderRuntime = process.env.ALLOW_RENDER_RUNTIME;
+  process.env.RENDER = 'true';
+  delete process.env.DISABLE_RENDER_RUNTIME;
+  delete process.env.ALLOW_RENDER_RUNTIME;
+  assert.equal(await waitIfRenderRuntimeDisabled('sniper'), false);
+  process.env.DISABLE_RENDER_RUNTIME = 'true';
+  process.env.ALLOW_RENDER_RUNTIME = 'true';
+  assert.equal(await waitIfRenderRuntimeDisabled('sniper'), false);
+  if (previousRender === undefined) {
+    delete process.env.RENDER;
+  } else {
+    process.env.RENDER = previousRender;
+  }
+  if (previousDisableRenderRuntime === undefined) {
+    delete process.env.DISABLE_RENDER_RUNTIME;
+  } else {
+    process.env.DISABLE_RENDER_RUNTIME = previousDisableRenderRuntime;
+  }
+  if (previousAllowRenderRuntime === undefined) {
+    delete process.env.ALLOW_RENDER_RUNTIME;
+  } else {
+    process.env.ALLOW_RENDER_RUNTIME = previousAllowRenderRuntime;
+  }
 
   console.log('All tests passed.');
 }

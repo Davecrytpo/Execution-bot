@@ -88,6 +88,7 @@ export const config = {
   solanaRpc: required('SOLANA_RPC', process.env.SOLANA_RPC ?? process.env.HELIUS_RPC_URL ?? 'https://api.mainnet-beta.solana.com'),
   heliusRpcUrl: required('HELIUS_RPC_URL', process.env.HELIUS_RPC_URL ?? process.env.SOLANA_RPC ?? 'https://api.mainnet-beta.solana.com'),
   heliusWsUrl: optional(process.env.HELIUS_WS_URL),
+  sniperWsUrl: optional(process.env.SNIPER_WS_URL) || optional(process.env.HELIUS_WS_URL),
   heliusGatekeeperRpcUrl: optional(process.env.HELIUS_GATEKEEPER_RPC_URL),
   alchemyRpcUrl: optional(process.env.ALCHEMY_RPC_URL),
   alchemyWsUrl: optional(process.env.ALCHEMY_WS_URL) || deriveAlchemyWsUrl(optional(process.env.ALCHEMY_RPC_URL)),
