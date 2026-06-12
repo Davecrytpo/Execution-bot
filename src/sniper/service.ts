@@ -158,6 +158,10 @@ function isTradeEventKind(eventKind: PumpEventKind): eventKind is TradeEventKind
   return eventKind === 'buy' || eventKind === 'sell' || eventKind === 'migrate';
 }
 
+function isResolvablePumpMint(mint: string) {
+  return Boolean(mint) && mint !== SOL_MINT;
+}
+
 export class SniperService {
   private readonly websocketUrls = config.sniperWsUrls;
   private ws: WebSocket | null = null;
@@ -700,7 +704,7 @@ export class SniperService {
     }
 
     const direct = extractMintFromParsedTransaction(tx, eventKind);
-    if (direct && (eventKind !== 'create' || await this.isTokenMint(direct))) {
+    if (direct && isResolvablePumpMint(direct) && (eventKind !== 'create' || await this.isTokenMint(direct))) {
       logger.info('sniper_create_mint_resolved', {
         mint: direct,
         method: 'token_balances'
@@ -728,6 +732,10 @@ export class SniperService {
       .map(({ key }) => key.toBase58());
 
     for (const candidate of candidates) {
+      if (!isResolvablePumpMint(candidate)) {
+        continue;
+      }
+
       if (await this.isTokenMint(candidate)) {
         logger.info('sniper_create_mint_resolved', {
           mint: candidate,
@@ -760,7 +768,7 @@ export class SniperService {
       }
 
       const candidate = accounts[0]?.toBase58();
-      if (candidate && await this.isTokenMint(candidate)) {
+      if (candidate && isResolvablePumpMint(candidate) && await this.isTokenMint(candidate)) {
         return candidate;
       }
       if (candidate) {
@@ -815,6 +823,10 @@ export class SniperService {
   }
 
   private async fetchLaunchSnapshot(mint: string, creatorWallet: string | null, bondingCurve: string) {
+    if (!isResolvablePumpMint(mint)) {
+      throw new Error(`invalid_pump_mint:${mint}`);
+    }
+
     const curveInfo = await rpcPool.withConnection(
       (connection) => connection.getAccountInfo(new PublicKey(bondingCurve), 'confirmed')
     );
