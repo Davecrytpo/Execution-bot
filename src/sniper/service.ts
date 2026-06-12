@@ -133,6 +133,18 @@ function normalizeSymbol(mint: string, symbol?: string) {
   return symbol?.trim() || mint.slice(0, 6);
 }
 
+function parseSubscriptionId(value: unknown) {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === 'string' && /^\d+$/.test(value)) {
+    return Number(value);
+  }
+
+  return null;
+}
+
 export function isJupiterRouteUnavailableError(error: unknown) {
   const message = String(error instanceof Error ? error.message : error ?? '').toLowerCase();
   return message.includes('token_not_tradable')
@@ -392,10 +404,32 @@ export class SniperService {
       this.pendingRequests.delete(payload.id);
 
       if (request.type === 'logs') {
-        this.logsSubscriptionId = typeof payload.result === 'number' ? payload.result : null;
-        logger.info('sniper_logs_subscribed', { subscriptionId: this.logsSubscriptionId });
-      } else if (request.type === 'account' && typeof payload.result === 'number') {
-        this.accountSubscriptions.set(payload.result, {
+        const subscriptionId = parseSubscriptionId(payload.result);
+        this.logsSubscriptionId = subscriptionId;
+        if (subscriptionId === null) {
+          const message = payload.error?.message ?? 'logs_subscription_missing_id';
+          markSniperWorkerDisconnected(message);
+          logger.error('sniper_logs_subscribe_failed', {
+            message,
+            code: payload.error?.code ?? null,
+            result: payload.result ?? null
+          });
+        } else {
+          logger.info('sniper_logs_subscribed', { subscriptionId });
+        }
+      } else if (request.type === 'account') {
+        const subscriptionId = parseSubscriptionId(payload.result);
+        if (subscriptionId === null) {
+          logger.error('sniper_account_subscribe_failed', {
+            mint: request.mint,
+            bondingCurve: request.bondingCurve,
+            message: payload.error?.message ?? 'account_subscription_missing_id',
+            code: payload.error?.code ?? null,
+            result: payload.result ?? null
+          });
+          return;
+        }
+        this.accountSubscriptions.set(subscriptionId, {
           mint: request.mint,
           bondingCurve: request.bondingCurve
         });
