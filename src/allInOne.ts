@@ -23,6 +23,10 @@ async function main() {
   let shuttingDown = false;
   const buildInfo = getBuildInfo();
 
+  if (process.env.NODE_ENV === 'production' && buildInfo.revision === 'unknown') {
+    throw new Error('build_revision_missing');
+  }
+
   const backgroundTasks: Array<Promise<unknown>> = [];
 
   if (config.enableTelegramBot) {
