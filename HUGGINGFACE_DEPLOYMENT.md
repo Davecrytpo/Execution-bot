@@ -37,6 +37,7 @@ https://YOUR-USERNAME-execution-bot.hf.space/api/telegram/webhook
 Optional secrets:
 
 - `SNIPER_WS_URL` - override websocket for the sniper; must support Solana `logsSubscribe`.
+- `SNIPER_WS_URLS` - comma-separated sniper websocket failover list; every URL must support Solana `logsSubscribe`.
 - `ALCHEMY_WS_URL`
 - `DATABASE_SSL`
 - `JUPITER_API_BASE_URL`

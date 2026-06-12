@@ -159,7 +159,7 @@ function isTradeEventKind(eventKind: PumpEventKind): eventKind is TradeEventKind
 }
 
 export class SniperService {
-  private readonly websocketUrls = [config.sniperWsUrl].filter(Boolean);
+  private readonly websocketUrls = config.sniperWsUrls;
   private ws: WebSocket | null = null;
   private wsIndex = 0;
   private reconnectAttempts = 0;
@@ -191,7 +191,10 @@ export class SniperService {
       return null;
     });
 
-    await this.connect();
+    await this.connect().catch((error: any) => {
+      markSniperWorkerDisconnected(error.message);
+      logger.error('sniper_initial_connect_failed', { message: error.message });
+    });
     this.startMaintenanceLoops();
   }
 
@@ -414,6 +417,7 @@ export class SniperService {
             code: payload.error?.code ?? null,
             result: payload.result ?? null
           });
+          this.ws?.close(4000, 'logs_subscribe_failed');
         } else {
           logger.info('sniper_logs_subscribed', { subscriptionId });
         }

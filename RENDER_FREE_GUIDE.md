@@ -122,6 +122,7 @@ Add these in the Render dashboard:
 - `HELIUS_RPC_URL=<helius rpc url>`
 - `HELIUS_WS_URL=<helius websocket url>`
 - `SNIPER_WS_URL=<websocket url that supports Solana logsSubscribe>` optional; use this if the sniper websocket is different from `HELIUS_WS_URL`
+- `SNIPER_WS_URLS=<primary websocket>,<backup websocket>` optional failover list; every URL must support Solana `logsSubscribe`
 - `HELIUS_GATEKEEPER_RPC_URL=<helius backup rpc url>`
 - `ALCHEMY_RPC_URL=<alchemy rpc url>`
 - `ALCHEMY_WS_URL=<alchemy websocket url>` optional for non-sniper websocket use; do not use it for the sniper because Alchemy rejects `logsSubscribe`

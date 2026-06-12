@@ -40,6 +40,7 @@ You will be prompted to enter or manually add these values:
 - `HELIUS_RPC_URL`
 - `HELIUS_WS_URL`
 - `SNIPER_WS_URL` if the sniper websocket is different from `HELIUS_WS_URL`
+- `SNIPER_WS_URLS` if you want a comma-separated sniper websocket failover list
 - `HELIUS_GATEKEEPER_RPC_URL`
 - `ALCHEMY_RPC_URL`
 - `ALCHEMY_WS_URL`

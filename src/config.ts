@@ -20,6 +20,13 @@ function optional(value: string | undefined) {
   return normalized ? normalized : '';
 }
 
+function optionalList(value: string | undefined) {
+  return optional(value)
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
 function toBoolean(value: string | undefined, fallback: boolean) {
   if (value === undefined) {
     return fallback;
@@ -59,8 +66,8 @@ function isAlchemyUrl(url: string) {
   return /(^|\.)alchemy\.com\//i.test(url) || /solana-mainnet\.g\.alchemy\.com/i.test(url);
 }
 
-function firstSupportedSniperWsUrl(...urls: string[]) {
-  return urls.find((url) => url && !isAlchemyUrl(url)) ?? '';
+function supportedSniperWsUrls(...urls: string[]) {
+  return Array.from(new Set(urls.filter((url) => url && !isAlchemyUrl(url))));
 }
 
 function deriveTelegramWebhookUrl() {
@@ -100,7 +107,8 @@ export const config = {
   solanaRpc: required('SOLANA_RPC', process.env.SOLANA_RPC ?? process.env.HELIUS_RPC_URL ?? 'https://api.mainnet-beta.solana.com'),
   heliusRpcUrl: required('HELIUS_RPC_URL', process.env.HELIUS_RPC_URL ?? process.env.SOLANA_RPC ?? 'https://api.mainnet-beta.solana.com'),
   heliusWsUrl: optional(process.env.HELIUS_WS_URL),
-  sniperWsUrl: firstSupportedSniperWsUrl(
+  sniperWsUrls: supportedSniperWsUrls(
+    ...optionalList(process.env.SNIPER_WS_URLS),
     optional(process.env.SNIPER_WS_URL),
     optional(process.env.HELIUS_WS_URL),
     deriveWsUrl(optional(process.env.HELIUS_RPC_URL))
