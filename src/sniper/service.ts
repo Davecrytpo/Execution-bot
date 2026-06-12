@@ -704,7 +704,7 @@ export class SniperService {
     }
 
     const direct = extractMintFromParsedTransaction(tx, eventKind);
-    if (direct && isResolvablePumpMint(direct) && (eventKind !== 'create' || await this.isTokenMint(direct))) {
+    if (direct && isResolvablePumpMint(direct) && (eventKind !== 'create' || await this.isValidCreateMintCandidate(direct))) {
       logger.info('sniper_create_mint_resolved', {
         mint: direct,
         method: 'token_balances'
@@ -736,7 +736,7 @@ export class SniperService {
         continue;
       }
 
-      if (await this.isTokenMint(candidate)) {
+      if (await this.isValidCreateMintCandidate(candidate)) {
         logger.info('sniper_create_mint_resolved', {
           mint: candidate,
           method: 'account_scan'
@@ -768,7 +768,7 @@ export class SniperService {
       }
 
       const candidate = accounts[0]?.toBase58();
-      if (candidate && isResolvablePumpMint(candidate) && await this.isTokenMint(candidate)) {
+      if (candidate && isResolvablePumpMint(candidate) && await this.isValidCreateMintCandidate(candidate)) {
         return candidate;
       }
       if (candidate) {
@@ -808,6 +808,24 @@ export class SniperService {
       });
       return false;
     }
+  }
+
+  private async isValidCreateMintCandidate(mint: string) {
+    if (!isResolvablePumpMint(mint)) {
+      return false;
+    }
+
+    const bondingCurve = deriveBondingCurveAddress(mint, config.pumpProgramId);
+    const bondingCurveInfo = await rpcPool.withConnection(
+      (connection) => connection.getAccountInfo(new PublicKey(bondingCurve), 'confirmed'),
+      { preferPrimary: false }
+    ).catch(() => null);
+
+    if (!bondingCurveInfo?.data) {
+      return false;
+    }
+
+    return this.isTokenMint(mint);
   }
 
   private async fetchGlobalState() {
