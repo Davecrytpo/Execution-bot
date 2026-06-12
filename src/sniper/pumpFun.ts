@@ -107,6 +107,31 @@ function clampPercentage(value: number) {
   return Math.max(0, Math.min(100, value));
 }
 
+function getMintFromParsedInstruction(instruction: unknown) {
+  if (!instruction || typeof instruction !== 'object' || !('parsed' in instruction)) {
+    return null;
+  }
+
+  const parsed = (instruction as {
+    parsed?: {
+      type?: string;
+      info?: {
+        mint?: string;
+        account?: string;
+        newAccount?: string;
+      };
+    };
+  }).parsed;
+
+  const type = parsed?.type?.toLowerCase() ?? '';
+  if (type !== 'initializemint' && type !== 'initializemint2') {
+    return null;
+  }
+
+  const mint = parsed?.info?.mint ?? parsed?.info?.account ?? parsed?.info?.newAccount;
+  return typeof mint === 'string' && mint !== SOL_MINT ? mint : null;
+}
+
 export function deriveBondingCurveAddress(mint: string, programId: string) {
   return PublicKey.findProgramAddressSync(
     [Buffer.from('bonding-curve'), new PublicKey(mint).toBuffer()],
@@ -212,6 +237,20 @@ export function extractMintFromParsedTransaction(
   tx: ParsedTransactionWithMeta,
   eventKind: PumpEventKind
 ) {
+  const allInstructions = [
+    ...(tx.transaction.message.instructions ?? []),
+    ...((tx.meta?.innerInstructions ?? []).flatMap((inner) => inner.instructions ?? []))
+  ];
+
+  if (eventKind === 'create') {
+    for (const instruction of allInstructions) {
+      const initializedMint = getMintFromParsedInstruction(instruction);
+      if (initializedMint) {
+        return initializedMint;
+      }
+    }
+  }
+
   const balances = aggregateTokenDeltas(tx);
   const entries = [...balances.entries()].filter(([mint]) => mint !== SOL_MINT);
 

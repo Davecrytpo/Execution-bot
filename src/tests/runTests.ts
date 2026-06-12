@@ -232,6 +232,21 @@ async function run() {
 
   const createTx = {
     meta: {
+      innerInstructions: [
+        {
+          index: 0,
+          instructions: [
+            {
+              parsed: {
+                type: 'initializeMint2',
+                info: {
+                  mint: 'TOKEN_MINT'
+                }
+              }
+            }
+          ]
+        }
+      ],
       preTokenBalances: [
         {
           accountIndex: 0,
