@@ -231,6 +231,11 @@ async function run() {
   assert.equal(getPumpEventKindFromLogs(['Program log: Instruction: Create']), 'create');
 
   const createTx = {
+    transaction: {
+      message: {
+        instructions: []
+      }
+    },
     meta: {
       innerInstructions: [
         {

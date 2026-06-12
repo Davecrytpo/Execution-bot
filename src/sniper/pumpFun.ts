@@ -238,7 +238,7 @@ export function extractMintFromParsedTransaction(
   eventKind: PumpEventKind
 ) {
   const allInstructions = [
-    ...(tx.transaction.message.instructions ?? []),
+    ...(((tx.transaction as ParsedTransactionWithMeta['transaction'] | undefined)?.message?.instructions) ?? []),
     ...((tx.meta?.innerInstructions ?? []).flatMap((inner) => inner.instructions ?? []))
   ];
 

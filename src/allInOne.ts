@@ -1,4 +1,5 @@
 import { pool } from './lib/db.js';
+import { getBuildInfo } from './lib/buildInfo.js';
 import { logger } from './lib/logger.js';
 import { config } from './config.js';
 import { startApi } from './index.js';
@@ -20,6 +21,7 @@ async function main() {
   const abortController = new AbortController();
   const server = startApi();
   let shuttingDown = false;
+  const buildInfo = getBuildInfo();
 
   const backgroundTasks: Array<Promise<unknown>> = [];
 
@@ -37,6 +39,8 @@ async function main() {
   }
 
   logger.info('all_in_one_components_started', {
+    revision: buildInfo.revision,
+    version: buildInfo.version,
     telegramBot: config.enableTelegramBot,
     executorWorker: config.enableExecutorWorker,
     monitorWorker: config.enableMonitorWorker,

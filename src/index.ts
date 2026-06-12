@@ -1,6 +1,7 @@
 import express from 'express';
 import { fileURLToPath } from 'node:url';
 import { config } from './config.js';
+import { getBuildInfo } from './lib/buildInfo.js';
 import { adminRouter } from './routes/admin.js';
 import { signalsRouter } from './routes/signals.js';
 import { telegramRouter } from './routes/telegram.js';
@@ -10,12 +11,15 @@ import { getSniperRuntimeStatus } from './sniper/runtime.js';
 
 export function createApp() {
   const app = express();
+  const buildInfo = getBuildInfo();
   app.use(express.json({ limit: '1mb' }));
 
   app.get('/', (_req, res) => {
     res.json({
       ok: true,
       service: 'solana-telegram-execution-bot',
+      revision: buildInfo.revision,
+      version: buildInfo.version,
       health: '/health'
     });
   });
@@ -48,6 +52,8 @@ export function createApp() {
 
     res.json({
       ok: true,
+      revision: buildInfo.revision,
+      version: buildInfo.version,
       ready: !config.enableTelegramBot || ['LIVE', 'DEGRADED'].includes(telegram.state),
       components: {
         telegram: config.enableTelegramBot ? telegram : { state: 'DISABLED' },
