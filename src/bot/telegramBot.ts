@@ -1047,16 +1047,34 @@ async function renderPositionsView(identity: BotIdentity, notice?: string, promp
 }
 
 async function handleCallbackQuery(update: TelegramUpdate) {
-  // ... (existing switch case logic)
+  const callback = update.callback_query;
+  if (!callback?.data) {
+    return;
+  }
+
+  const identity = await getIdentity(update);
+  if (!identity) {
+    return;
+  }
+
+  const session = getDashboardSession(identity.chatId);
+  const preferredMessageId = getCallbackMessageId(update);
+  if (preferredMessageId) {
+    session.messageId = preferredMessageId;
+  }
+
+  await answerCallbackQuery(callback.id).catch(() => undefined);
+
+  const data = callback.data;
+
+  switch (data) {
       case 'act:sell_token': {
         const mint = data.split(':')[2];
-        const identity = await getIdentityFromUpdate(update);
         await queueManualSell(identity.walletContext.userId, mint);
         await showDashboard(identity, 'analytics_positions', `Sell order queued for \`${mint.slice(0, 8)}...\`.`, preferredMessageId);
         return;
       }
       case 'act:sell_all': {
-        const identity = await getIdentityFromUpdate(update);
         const positions = await getOpenPositions(identity.walletContext.userId);
         for (const pos of positions) {
           await queueManualSell(identity.walletContext.userId, pos.mint);
@@ -1064,7 +1082,9 @@ async function handleCallbackQuery(update: TelegramUpdate) {
         await showDashboard(identity, 'analytics_positions', 'Sell orders queued for ALL positions.', preferredMessageId);
         return;
       }
-      // ... (rest of the existing switch case)
+      case 'view:home':
+        await showDashboard(identity, 'home', undefined, preferredMessageId);
+        return;
 
 
 async function renderOrdersView(identity: BotIdentity, notice?: string, prompt?: string): Promise<DashboardRender> {
