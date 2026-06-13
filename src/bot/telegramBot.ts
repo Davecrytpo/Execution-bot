@@ -1085,7 +1085,11 @@ async function handleCallbackQuery(update: TelegramUpdate) {
       case 'view:home':
         await showDashboard(identity, 'home', undefined, preferredMessageId);
         return;
-
+      default:
+        // ... (existing cases)
+        break;
+  }
+}
 
 async function renderOrdersView(identity: BotIdentity, notice?: string, prompt?: string): Promise<DashboardRender> {
   const orders = await getRecentOrders(identity.walletContext.userId);
