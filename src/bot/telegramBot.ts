@@ -1028,9 +1028,15 @@ async function renderPositionsView(identity: BotIdentity, notice?: string, promp
     })
     : ['No open positions right now.', '', 'Fund your wallet and enable Auto Buy to start trading.'];
 
+  const buttons: InlineKeyboardButton[][] = positions.map(p => [button(`Sell ${p.mint.slice(0, 6)}...`, `act:sell_token:${p.mint}`)]);
+  if (positions.length > 1) {
+    buttons.push([button('🚨 SELL ALL POSITIONS', 'act:sell_all')]);
+  }
+
   return {
     text: composeDashboardText('Open Positions', ['*Active positions*', '', ...lines], notice, prompt),
     buttons: [
+      ...buttons,
       [button('📊 Check Live PnL', 'act:positions_pnl'), button('🔄 Refresh', 'view:analytics_positions')],
       ...navRows('analytics_positions')
     ]
