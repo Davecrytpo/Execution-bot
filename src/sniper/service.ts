@@ -972,15 +972,22 @@ export class SniperService {
     const decimals = mintParsed?.parsed?.info?.decimals ?? 6;
     const mintAuthorityRevoked = !mintParsed?.parsed?.info?.mintAuthority;
 
+    // [Fix] Reduce RPC credit usage: 500ms delay + single primary connection guard
+    await wait(500);
+
     const creatorAccounts = creatorWallet
-      ? await rpcPool.withConnection((connection) => connection.getParsedTokenAccountsByOwner(
-        new PublicKey(creatorWallet),
-        { mint: new PublicKey(mint) },
-        'confirmed'
-      ))
+      ? await rpcPool.withConnection(
+        (connection) => connection.getParsedTokenAccountsByOwner(
+          new PublicKey(creatorWallet),
+          { mint: new PublicKey(mint) },
+          'confirmed'
+        ),
+        { preferPrimary: true }
+      )
       : null;
     const largestAccounts = await rpcPool.withConnection(
-      (connection) => connection.getTokenLargestAccounts(new PublicKey(mint), 'confirmed')
+      (connection) => connection.getTokenLargestAccounts(new PublicKey(mint), 'confirmed'),
+      { preferPrimary: true }
     );
     const walletReputation = creatorWallet
       ? await getWalletReputation(creatorWallet)
@@ -1006,23 +1013,23 @@ export class SniperService {
     }, 0n) ?? 0n;
 
     const holderOwners: Array<{ owner: string; amountRaw: bigint }> = [];
-    for (const entry of largestAccounts.value.slice(0, 5)) {
-      const parsed = await rpcPool.withConnection((connection) =>
-        connection.getParsedAccountInfo(entry.address, 'confirmed')
-      );
-      const info = parsed.value?.data as {
-        parsed?: {
-          info?: {
-            owner?: string;
-            tokenAmount?: { amount?: string };
-          };
-        };
-      } | undefined;
+    const holderAddresses = largestAccounts.value.slice(0, 5).map((entry) => entry.address);
+    const holderAccounts = await rpcPool.withConnection(
+      (connection) => connection.getMultipleAccountsInfo(holderAddresses, 'confirmed'),
+      { preferPrimary: true }
+    );
+
+    holderAccounts.forEach((account, i) => {
+      if (!account) {
+        return;
+      }
+      // SPL Token account owner is at bytes 32-63
+      const owner = new PublicKey(account.data.slice(32, 64)).toBase58();
       holderOwners.push({
-        owner: info?.parsed?.info?.owner ?? '',
-        amountRaw: BigInt(entry.amount)
+        owner,
+        amountRaw: BigInt(largestAccounts.value[i].amount)
       });
-    }
+    });
 
     const topHolderHoldingsRaw = holderOwners
       .filter((holder) => holder.owner && holder.owner !== bondingCurve)

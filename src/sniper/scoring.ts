@@ -60,7 +60,7 @@ export function decideLaunch(snapshot: LaunchSnapshot): LaunchDecision {
   if (!snapshot.mintAuthorityRevoked) {
     score -= 15;
   }
-  if (snapshot.topHolderPct > config.sniperMaxTopHolderPct) {
+  if (snapshot.topHolderPct > config.sniperMaxTopHolderPct && snapshot.stats.uniqueBuyers > 3) {
     hardRejects.push('top_holder_concentration_too_high');
   }
   if (snapshot.walletRiskLabel === 'high_risk') {

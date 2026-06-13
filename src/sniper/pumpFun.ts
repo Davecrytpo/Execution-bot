@@ -412,7 +412,7 @@ export function computeBondingCurveMetrics(params: {
   const virtualTokens = Number(curveState.virtualTokenReserves) / tokenDivisor;
   const priceInSol = virtualTokens > 0 ? virtualSol / virtualTokens : 0;
   const marketCapSol = priceInSol * (totalSupplyRaw / tokenDivisor);
-  const liquiditySol = Number(curveState.realSolReserves) / LAMPORTS_PER_SOL;
+  const liquiditySol = virtualSol;
   const curveProgressPct = initialRealTokenReservesRaw > 0
     ? 100 - ((Number(curveState.realTokenReserves) / initialRealTokenReservesRaw) * 100)
     : 0;
