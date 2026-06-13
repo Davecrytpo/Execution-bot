@@ -1183,6 +1183,30 @@ export async function processNextWithdrawal() {
   return true;
 }
 
+export async function queueManualSell(userId: string, mint: string) {
+  const user = await getUserWithWallet(userId);
+  if (!user) {
+    throw new Error('user_or_wallet_not_found');
+  }
+
+  const signalResult = await query<{ id: string }>(
+    `
+    INSERT INTO execution_signals (signal_key, mint, source, side, score, payload, status)
+    VALUES ($1, $2, 'manual', 'SELL', 100, $3, 'QUEUED')
+    RETURNING id
+    `,
+    [
+      `manual_sell:${userId}:${mint}:${Date.now()}`,
+      mint,
+      {
+        mode: 'manual_sell',
+        signalSource: 'manual_sell'
+      }
+    ]
+  );
+  return signalResult.rows[0].id;
+}
+
 export async function enqueueManualTradeForUser(params: {
   userId: string;
   mint: string;

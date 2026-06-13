@@ -1028,14 +1028,41 @@ async function renderPositionsView(identity: BotIdentity, notice?: string, promp
     })
     : ['No open positions right now.', '', 'Fund your wallet and enable Auto Buy to start trading.'];
 
+  const buttons = positions.map(p => [button(`Sell ${p.mint.slice(0, 6)}...`, `act:sell_token:${p.mint}`)]);
+  if (positions.length > 1) {
+    buttons.push([button('🚨 SELL ALL POSITIONS', 'act:sell_all')]);
+  }
+
   return {
     text: composeDashboardText('Open Positions', ['*Active positions*', '', ...lines], notice, prompt),
     buttons: [
+      ...buttons,
       [button('📊 Check Live PnL', 'act:positions_pnl'), button('🔄 Refresh', 'view:analytics_positions')],
       ...navRows('analytics_positions')
     ]
   };
 }
+
+async function handleCallbackQuery(update: TelegramUpdate) {
+  // ... (existing switch case logic)
+      case 'act:sell_token': {
+        const mint = data.split(':')[2];
+        const identity = await getIdentityFromUpdate(update);
+        await queueManualSell(identity.walletContext.userId, mint);
+        await showDashboard(identity, 'analytics_positions', `Sell order queued for \`${mint.slice(0, 8)}...\`.`, preferredMessageId);
+        return;
+      }
+      case 'act:sell_all': {
+        const identity = await getIdentityFromUpdate(update);
+        const positions = await getOpenPositions(identity.walletContext.userId);
+        for (const pos of positions) {
+          await queueManualSell(identity.walletContext.userId, pos.mint);
+        }
+        await showDashboard(identity, 'analytics_positions', 'Sell orders queued for ALL positions.', preferredMessageId);
+        return;
+      }
+      // ... (rest of the existing switch case)
+
 
 async function renderOrdersView(identity: BotIdentity, notice?: string, prompt?: string): Promise<DashboardRender> {
   const orders = await getRecentOrders(identity.walletContext.userId);
