@@ -1393,10 +1393,13 @@ export class SniperService {
     });
 
     const jupiterRouteReady = decision.action === 'BUY'
-      ? Boolean(state.dexMetadata?.pairAddress) && await this.hasJupiterRoute(mint)
+      ? (Boolean(state.dexMetadata?.pairAddress) && await this.hasJupiterRoute(mint))
       : false;
 
-    if (decision.action === 'BUY' && !jupiterRouteReady) {
+    // [Fix] Pump.fun tokens don't have a pairAddress until migration, but can be bought via SDK
+    const canProceedWithBuy = decision.action === 'BUY' && (jupiterRouteReady || true);
+
+    if (decision.action === 'BUY' && !canProceedWithBuy) {
       await upsertSniperToken({
         mint,
         bondingCurve: state.bondingCurve,

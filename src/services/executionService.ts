@@ -453,7 +453,8 @@ async function canUserOpenNewTrade(userId: string, amountLamports: number) {
   const spentTodayLamports = Number(row.spent_today_lamports);
   const openPositions = Number(row.open_positions);
 
-  if (openPositions >= 10) {
+  // [Fix] Increased position limit for sniper activity
+  if (openPositions >= 50) {
     return false;
   }
 
