@@ -928,6 +928,9 @@ export class SniperService {
       throw new Error(`invalid_pump_mint:${mint}`);
     }
 
+    // [DEBUG] bondingCurvePDA for diagnostic purposes
+    logger.info('diagnostic_pda_check', { mint, bondingCurve });
+
     const curveInfo = await rpcPool.withConnection(
       (connection) => connection.getAccountInfo(new PublicKey(bondingCurve), 'confirmed')
     );

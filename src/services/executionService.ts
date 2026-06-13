@@ -8,6 +8,7 @@ import {
 import { PumpFunSDK } from 'pumpdotfun-sdk';
 import { AnchorProvider, Wallet } from '@coral-xyz/anchor';
 import { config } from '../config.js';
+import { deriveBondingCurveAddress } from '../sniper/pumpFun.js';
 import { query } from '../lib/db.js';
 import { logger } from '../lib/logger.js';
 import { sendMessage } from '../lib/telegram.js';
@@ -752,6 +753,15 @@ async function processPumpTrade(order: OrderRow, signer: Keypair) {
   if (order.side === 'BUY') {
     return await sdk.buy(signer, mint, BigInt(order.amount_lamports), slippageBps, options);
   } else {
+    // [Fix B] Check if bonding curve exists before selling via Pump SDK
+    const bondingCurve = deriveBondingCurveAddress(order.mint, config.pumpProgramId);
+    const acc = await rpcPool.withConnection(
+      (connection) => connection.getAccountInfo(new PublicKey(bondingCurve), 'confirmed')
+    );
+    if (!acc) {
+      logger.info('pump_bonding_curve_not_found_on_sell_assuming_migrated', { mint: order.mint });
+      throw new Error('pump_migrated_to_raydium');
+    }
     return await sdk.sell(signer, mint, BigInt(order.amount_lamports), slippageBps, options);
   }
 }
@@ -772,6 +782,7 @@ export async function processNextOrder() {
     const walletRecord = await buildWalletRecord(order);
     const secret = decodeWalletSecret(walletRecord);
     const signer = Keypair.fromSecretKey(secret);
+    let usePumpSdk = isPumpToken(order.mint);
 
     for (let attempt = 1; attempt <= MAX_ORDER_ATTEMPTS; attempt += 1) {
       attemptsUsed = attempt;
@@ -783,25 +794,55 @@ export async function processNextOrder() {
         let quote: any;
         let swapResponse: any = {};
 
-        if (isPumpToken(order.mint)) {
+        if (usePumpSdk) {
           logger.info('executing_pump_trade', { mint: order.mint, side: order.side, attempt });
-          const pumpResult = await processPumpTrade({
-            ...order,
-            slippage_bps: attemptSlippageBps,
-            priority_fee_lamports: String(attemptPriorityFeeLamports)
-          }, signer);
-          
-          if (!pumpResult.success) {
-            throw new Error(pumpResult.error ? JSON.stringify(pumpResult.error) : 'pump_trade_failed');
+          try {
+            const pumpResult = await processPumpTrade({
+              ...order,
+              slippage_bps: attemptSlippageBps,
+              priority_fee_lamports: String(attemptPriorityFeeLamports)
+            }, signer);
+            
+            if (!pumpResult.success) {
+              throw new Error(pumpResult.error ? JSON.stringify(pumpResult.error) : 'pump_trade_failed');
+            }
+            signature = pumpResult.signature;
+            if (!signature) {
+              throw new Error('pump_trade_no_signature');
+            }
+            quote = { outAmount: '0' }; // Will be updated after confirmation
+            swapResponse = {
+              dynamicSlippageReport: { slippageBps: attemptSlippageBps }
+            };
+          } catch (pumpError: any) {
+            if (pumpError.message === 'pump_migrated_to_raydium') {
+              logger.info('pump_migrated_to_raydium_detected_switching_to_jupiter', { mint: order.mint });
+              usePumpSdk = false;
+              // Fallback to Jupiter immediately in the same attempt
+              quote = await getBestQuote(
+                order.input_mint,
+                order.output_mint,
+                Number(order.amount_lamports),
+                attemptSlippageBps
+              );
+              swapResponse = await buildSwapTransactionForOrder(
+                order,
+                quote,
+                signer.publicKey.toBase58(),
+                attemptPriorityFeeLamports
+              );
+              const tx = VersionedTransaction.deserialize(Buffer.from(swapResponse.swapTransaction!, 'base64'));
+              tx.sign([signer]);
+
+              const sendResult = await rpcPool.sendRawTransactionRace(tx.serialize(), {
+                skipPreflight: shouldSkipPreflight(order.metadata),
+                preflightCommitment: 'processed'
+              });
+              signature = sendResult.signature;
+            } else {
+              throw pumpError;
+            }
           }
-          signature = pumpResult.signature;
-          if (!signature) {
-            throw new Error('pump_trade_no_signature');
-          }
-          quote = { outAmount: '0' }; // Will be updated after confirmation
-          swapResponse = {
-            dynamicSlippageReport: { slippageBps: attemptSlippageBps }
-          };
         } else {
           quote = await getBestQuote(
             order.input_mint,

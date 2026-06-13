@@ -9,20 +9,29 @@ export async function startExecutorWorker(signal?: AbortSignal) {
     return;
   }
 
-  while (!signal?.aborted) {
-    try {
-      const processed = await processNextOrder();
-      if (!processed) {
+  // [Fix C] Parallel queue processing
+  const CONCURRENCY = 3;
+  logger.info('executor_worker_starting_parallel_loops', { concurrency: CONCURRENCY });
+
+  const workerLoop = async (id: number) => {
+    while (!signal?.aborted) {
+      try {
+        const processed = await processNextOrder();
+        if (!processed) {
+          await new Promise((resolve) => setTimeout(resolve, config.pollIntervalMs));
+        }
+      } catch (error: any) {
+        if (signal?.aborted) {
+          break;
+        }
+        logger.error('worker_loop_error', { workerId: id, message: error.message });
         await new Promise((resolve) => setTimeout(resolve, config.pollIntervalMs));
       }
-    } catch (error: any) {
-      if (signal?.aborted) {
-        break;
-      }
-      logger.error('worker_loop_error', { message: error.message });
-      await new Promise((resolve) => setTimeout(resolve, config.pollIntervalMs));
     }
-  }
+  };
+
+  const loops = Array.from({ length: CONCURRENCY }).map((_, i) => workerLoop(i));
+  await Promise.all(loops);
 }
 
 const isDirectRun = process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1];
