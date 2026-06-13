@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { config } from '../config.js';
+import { logger } from './logger.js';
 
 type TelegramMethod =
   | 'getUpdates'

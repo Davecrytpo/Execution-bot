@@ -779,7 +779,7 @@ export async function processNextOrder() {
       const attemptPriorityFeeLamports = resolveAttemptPriority(Number(order.priority_fee_lamports ?? 0), attempt);
 
       try {
-        let signature: string;
+        let signature: string | undefined;
         let quote: any;
         let swapResponse: any = {};
 
@@ -792,9 +792,12 @@ export async function processNextOrder() {
           }, signer);
           
           if (!pumpResult.success) {
-            throw new Error(pumpResult.error || 'pump_trade_failed');
+            throw new Error(pumpResult.error ? JSON.stringify(pumpResult.error) : 'pump_trade_failed');
           }
           signature = pumpResult.signature;
+          if (!signature) {
+            throw new Error('pump_trade_no_signature');
+          }
           quote = { outAmount: '0' }; // Will be updated after confirmation
           swapResponse = {
             dynamicSlippageReport: { slippageBps: attemptSlippageBps }
