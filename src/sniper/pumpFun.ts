@@ -184,34 +184,40 @@ export function getPumpEventKindFromLogs(logs: string[]) {
 }
 
 export function decodeBondingCurveState(data: Buffer): BondingCurveState {
-  const offsets = [8, 0];
-
-  for (const offset of offsets) {
-    if (data.length < offset + 41) {
-      continue;
-    }
-
-    const state = {
-      virtualTokenReserves: readBigIntLE(data, offset),
-      virtualSolReserves: readBigIntLE(data, offset + 8),
-      realTokenReserves: readBigIntLE(data, offset + 16),
-      realSolReserves: readBigIntLE(data, offset + 24),
-      tokenTotalSupply: readBigIntLE(data, offset + 32),
-      complete: data[offset + 40] === 1,
-      discriminatorOffset: offset,
-      rawLength: data.length
-    };
-
-    if (
-      state.virtualTokenReserves > 0n
-      && state.virtualSolReserves > 0n
-      && state.tokenTotalSupply > 0n
-    ) {
-      return state;
-    }
+  if (data.length < 41) {
+    throw new Error(`bonding_curve_data_too_short:${data.length}`);
   }
 
-  throw new Error('invalid_bonding_curve_state');
+  const tryDecode = (offset: number) => {
+    try {
+      const state = {
+        virtualTokenReserves: data.readBigUInt64LE(offset),
+        virtualSolReserves: data.readBigUInt64LE(offset + 8),
+        realTokenReserves: data.readBigUInt64LE(offset + 16),
+        realSolReserves: data.readBigUInt64LE(offset + 24),
+        tokenTotalSupply: data.readBigUInt64LE(offset + 32),
+        complete: data[offset + 40] === 1,
+        discriminatorOffset: offset,
+        rawLength: data.length
+      };
+
+      // Basic sanity check: virtual reserves must be positive for a live curve
+      if (state.virtualTokenReserves > 0n && state.virtualSolReserves > 0n) {
+        return state;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  };
+
+  // Try standard Anchor offset (8) first, then fallback to 0
+  const decoded = tryDecode(8) || tryDecode(0);
+  if (decoded) {
+    return decoded;
+  }
+
+  throw new Error(`invalid_bonding_curve_state:len=${data.length}:hex=${data.slice(0, 16).toString('hex')}`);
 }
 
 export function decodePumpGlobalState(data: Buffer): PumpGlobalState {

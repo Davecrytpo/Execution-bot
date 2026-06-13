@@ -942,6 +942,13 @@ export class SniperService {
       throw new Error('bonding_curve_account_missing');
     }
 
+    const curveData = Buffer.from(curveInfo.data);
+    logger.info('snapshot_raw_account_found', {
+      mint,
+      dataLength: curveData.length,
+      dataHex: curveData.slice(0, 16).toString('hex')
+    });
+
     const mintParsed = mintInfo.value?.data as {
       parsed?: {
         info?: {
