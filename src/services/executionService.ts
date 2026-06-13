@@ -1184,8 +1184,10 @@ export async function processNextWithdrawal() {
 }
 
 export async function queueManualSell(userId: string, mint: string) {
+  logger.info('manual_sell_triggered', { userId, mint });
   const user = await getUserWithWallet(userId);
   if (!user) {
+    logger.error('manual_sell_failed', { userId, mint, error: 'user_or_wallet_not_found' });
     throw new Error('user_or_wallet_not_found');
   }
 
@@ -1202,28 +1204,35 @@ export async function queueManualSell(userId: string, mint: string) {
   );
   
   if (pos.rowCount === 0) {
+    logger.error('manual_sell_failed', { userId, mint, error: 'no_open_position_found' });
     throw new Error('no_open_position_found');
   }
 
-  const orderResult = await query<{ id: string }>(
-    `
-    INSERT INTO execution_orders (
-      user_id, wallet_id, mint, side, amount_lamports, 
-      input_mint, output_mint, status, created_at, updated_at
-    )
-    VALUES ($1, $2, $3, 'SELL', $4, $5, $6, 'QUEUED', NOW(), NOW())
-    RETURNING id
-    `,
-    [
-      userId,
-      user.wallet_id,
-      mint,
-      pos.rows[0].amount_raw,
-      mint,
-      'So11111111111111111111111111111111111111112'
-    ]
-  );
-  return orderResult.rows[0].id;
+  try {
+    const orderResult = await query<{ id: string }>(
+      `
+      INSERT INTO execution_orders (
+        user_id, wallet_id, mint, side, amount_lamports, 
+        input_mint, output_mint, status, created_at, updated_at
+      )
+      VALUES ($1, $2, $3, 'SELL', $4, $5, $6, 'QUEUED', NOW(), NOW())
+      RETURNING id
+      `,
+      [
+        userId,
+        user.wallet_id,
+        mint,
+        pos.rows[0].amount_raw,
+        mint,
+        'So11111111111111111111111111111111111111112'
+      ]
+    );
+    logger.info('manual_sell_queued', { userId, mint, orderId: orderResult.rows[0].id });
+    return orderResult.rows[0].id;
+  } catch (e: any) {
+    logger.error('manual_sell_db_error', { userId, mint, error: e.message });
+    throw e;
+  }
 }
 
 export async function enqueueManualTradeForUser(params: {
