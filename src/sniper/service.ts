@@ -888,7 +888,8 @@ export class SniperService {
         const retriable = retriableMessage.includes('missing')
           || retriableMessage.includes('not found')
           || retriableMessage.includes('invalid_bonding_curve_state')
-          || retriableMessage.includes('account not found');
+          || retriableMessage.includes('account not found')
+          || retriableMessage.includes('mint_not_ready');
 
         if (!retriable || attempt === attempts) {
           break;
@@ -930,6 +931,24 @@ export class SniperService {
     const mintInfo = await rpcPool.withConnection(
       (connection) => connection.getParsedAccountInfo(new PublicKey(mint), 'confirmed')
     );
+
+    if (!curveInfo?.data) {
+      throw new Error('bonding_curve_account_missing');
+    }
+
+    const mintParsed = mintInfo.value?.data as {
+      parsed?: {
+        info?: {
+          decimals?: number;
+          mintAuthority?: string | null;
+        };
+      };
+    } | undefined;
+    if (!mintInfo.value || mintInfo.value.owner.toBase58() !== TOKEN_PROGRAM_ID || Buffer.isBuffer(mintInfo.value.data) || mintParsed?.parsed?.info?.decimals === undefined) {
+      throw new Error('mint_not_ready');
+    }
+
+    const curveState = decodeBondingCurveState(Buffer.from(curveInfo.data));
     const creatorAccounts = creatorWallet
       ? await rpcPool.withConnection((connection) => connection.getParsedTokenAccountsByOwner(
         new PublicKey(creatorWallet),
@@ -951,20 +970,6 @@ export class SniperService {
         rugsSeen: 0
       };
     const dexMetadata = await this.fetchDexScreenerMetadata(mint);
-
-    if (!curveInfo?.data) {
-      throw new Error('bonding_curve_account_missing');
-    }
-
-    const curveState = decodeBondingCurveState(Buffer.from(curveInfo.data));
-    const mintParsed = mintInfo.value?.data as {
-      parsed?: {
-        info?: {
-          decimals?: number;
-          mintAuthority?: string | null;
-        };
-      };
-    } | undefined;
 
     const decimals = mintParsed?.parsed?.info?.decimals ?? 6;
     const mintAuthorityRevoked = !mintParsed?.parsed?.info?.mintAuthority;
