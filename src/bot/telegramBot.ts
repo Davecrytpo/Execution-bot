@@ -32,10 +32,7 @@ import {
   refreshWalletBalanceCache,
   updateUserSettings
 } from '../services/custodyService.js';
-import {
-  enqueueManualTradeForUser,
-  queueManualSell
-} from '../services/executionService.js';
+import { enqueueManualTradeForUser } from '../services/executionService.js';
 import { logger } from '../lib/logger.js';
 import { waitIfRenderRuntimeDisabled } from '../lib/renderGuard.js';
 import { logAuditAction } from '../lib/audit.js';
@@ -1031,64 +1028,13 @@ async function renderPositionsView(identity: BotIdentity, notice?: string, promp
     })
     : ['No open positions right now.', '', 'Fund your wallet and enable Auto Buy to start trading.'];
 
-  const buttons = positions.map(p => [button(`Sell ${p.mint.slice(0, 6)}...`, `act:sell_token:${p.mint}`)]);
-  if (positions.length > 1) {
-    buttons.push([button('🚨 SELL ALL POSITIONS', 'act:sell_all')]);
-  }
-
   return {
     text: composeDashboardText('Open Positions', ['*Active positions*', '', ...lines], notice, prompt),
     buttons: [
-      ...buttons,
       [button('📊 Check Live PnL', 'act:positions_pnl'), button('🔄 Refresh', 'view:analytics_positions')],
       ...navRows('analytics_positions')
     ]
   };
-}
-
-async function handleCallbackQuery(update: TelegramUpdate) {
-  const callback = update.callback_query;
-  if (!callback?.data) {
-    return;
-  }
-
-  const identity = await getIdentity(update);
-  if (!identity) {
-    return;
-  }
-
-  const session = getDashboardSession(identity.chatId);
-  const preferredMessageId = getCallbackMessageId(update);
-  if (preferredMessageId) {
-    session.messageId = preferredMessageId;
-  }
-
-  await answerCallbackQuery(callback.id).catch(() => undefined);
-
-  const data = callback.data;
-
-  switch (data) {
-      case 'act:sell_token': {
-        const mint = data.split(':')[2];
-        await queueManualSell(identity.walletContext.userId, mint);
-        await showDashboard(identity, 'analytics_positions', `Sell order queued for \`${mint.slice(0, 8)}...\`.`, preferredMessageId);
-        return;
-      }
-      case 'act:sell_all': {
-        const positions = await getOpenPositions(identity.walletContext.userId);
-        for (const pos of positions) {
-          await queueManualSell(identity.walletContext.userId, pos.mint);
-        }
-        await showDashboard(identity, 'analytics_positions', 'Sell orders queued for ALL positions.', preferredMessageId);
-        return;
-      }
-      case 'view:home':
-        await showDashboard(identity, 'home', undefined, preferredMessageId);
-        return;
-      default:
-        // ... (existing cases)
-        break;
-  }
 }
 
 async function renderOrdersView(identity: BotIdentity, notice?: string, prompt?: string): Promise<DashboardRender> {
