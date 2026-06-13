@@ -1189,22 +1189,41 @@ export async function queueManualSell(userId: string, mint: string) {
     throw new Error('user_or_wallet_not_found');
   }
 
-  const signalResult = await query<{ id: string }>(
+  // Get current position to find entry info and amount
+  const pos = await query<{
+    amount_raw: string,
+    entry_sol_lamports: string
+  }>(
+    `SELECT token_amount_raw as amount_raw, entry_sol_lamports 
+     FROM positions 
+     WHERE user_id = $1 AND mint = $2 AND status = 'OPEN' 
+     LIMIT 1`,
+    [userId, mint]
+  );
+  
+  if (pos.rowCount === 0) {
+    throw new Error('no_open_position_found');
+  }
+
+  const orderResult = await query<{ id: string }>(
     `
-    INSERT INTO execution_signals (signal_key, mint, source, side, score, payload, status)
-    VALUES ($1, $2, 'manual', 'SELL', 100, $3, 'QUEUED')
+    INSERT INTO execution_orders (
+      user_id, wallet_id, mint, side, amount_lamports, 
+      input_mint, output_mint, status, created_at, updated_at
+    )
+    VALUES ($1, $2, $3, 'SELL', $4, $5, $6, 'QUEUED', NOW(), NOW())
     RETURNING id
     `,
     [
-      `manual_sell:${userId}:${mint}:${Date.now()}`,
+      userId,
+      user.wallet_id,
       mint,
-      {
-        mode: 'manual_sell',
-        signalSource: 'manual_sell'
-      }
+      pos.rows[0].amount_raw,
+      mint,
+      'So11111111111111111111111111111111111111112'
     ]
   );
-  return signalResult.rows[0].id;
+  return orderResult.rows[0].id;
 }
 
 export async function enqueueManualTradeForUser(params: {
