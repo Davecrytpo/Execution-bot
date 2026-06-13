@@ -5,6 +5,7 @@ import {
   Transaction,
   VersionedTransaction
 } from '@solana/web3.js';
+const TOKEN_PROGRAM_ID = new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
 import { PumpFunSDK } from 'pumpdotfun-sdk';
 import { AnchorProvider, Wallet } from '@coral-xyz/anchor';
 import { config } from '../config.js';
