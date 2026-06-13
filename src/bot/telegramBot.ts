@@ -32,7 +32,10 @@ import {
   refreshWalletBalanceCache,
   updateUserSettings
 } from '../services/custodyService.js';
-import { enqueueManualTradeForUser } from '../services/executionService.js';
+import {
+  enqueueManualTradeForUser,
+  queueManualSell
+} from '../services/executionService.js';
 import { logger } from '../lib/logger.js';
 import { waitIfRenderRuntimeDisabled } from '../lib/renderGuard.js';
 import { logAuditAction } from '../lib/audit.js';
