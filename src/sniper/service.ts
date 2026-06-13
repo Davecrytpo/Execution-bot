@@ -943,6 +943,16 @@ export class SniperService {
     }
 
     const curveData = Buffer.from(curveInfo.data);
+    const curveState = decodeBondingCurveState(curveData);
+
+    // [Readiness Check] Only block if migrated or completely uninitialized
+    if (curveState.complete) {
+      throw new Error('bonding_curve_complete');
+    }
+    if (curveState.virtualTokenReserves === 0n) {
+      throw new Error('mint_not_ready');
+    }
+
     logger.info('snapshot_raw_account_found', {
       mint,
       dataLength: curveData.length,
@@ -957,11 +967,11 @@ export class SniperService {
         };
       };
     } | undefined;
-    if (!mintInfo.value || mintInfo.value.owner.toBase58() !== TOKEN_PROGRAM_ID || Buffer.isBuffer(mintInfo.value.data) || mintParsed?.parsed?.info?.decimals === undefined) {
-      throw new Error('mint_not_ready');
-    }
 
-    const curveState = decodeBondingCurveState(Buffer.from(curveInfo.data));
+    // Use default decimals (6) if mint is not yet parsed by RPC
+    const decimals = mintParsed?.parsed?.info?.decimals ?? 6;
+    const mintAuthorityRevoked = !mintParsed?.parsed?.info?.mintAuthority;
+
     const creatorAccounts = creatorWallet
       ? await rpcPool.withConnection((connection) => connection.getParsedTokenAccountsByOwner(
         new PublicKey(creatorWallet),
@@ -984,8 +994,6 @@ export class SniperService {
       };
     const dexMetadata = await this.fetchDexScreenerMetadata(mint);
 
-    const decimals = mintParsed?.parsed?.info?.decimals ?? 6;
-    const mintAuthorityRevoked = !mintParsed?.parsed?.info?.mintAuthority;
     const creatorHoldingsRaw = creatorAccounts?.value?.reduce((sum, account) => {
       const parsed = account.account.data as {
         parsed?: {
