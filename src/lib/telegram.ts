@@ -183,12 +183,20 @@ export async function sendMessage(
   text: string,
   options?: SendMessageOptions
 ): Promise<TelegramMessage> {
-  return telegramRequest('sendMessage', {
-    chat_id: chatId,
-    text,
-    parse_mode: 'Markdown',
-    reply_markup: options?.replyMarkup
-  });
+  try {
+    return await telegramRequest('sendMessage', {
+      chat_id: chatId,
+      text,
+      parse_mode: 'Markdown',
+      reply_markup: options?.replyMarkup
+    });
+  } catch (error) {
+    logger.error('telegram_send_message_failed', { chatId, error: String(error) });
+    return {
+      message_id: 0,
+      chat: { id: typeof chatId === 'number' ? chatId : 0 }
+    };
+  }
 }
 
 export async function sendPhoto(

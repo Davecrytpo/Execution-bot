@@ -5,6 +5,8 @@ import {
   Transaction,
   VersionedTransaction
 } from '@solana/web3.js';
+import { PumpFunSDK } from 'pumpdotfun-sdk';
+import { AnchorProvider, Wallet } from '@coral-xyz/anchor';
 import { config } from '../config.js';
 import { query } from '../lib/db.js';
 import { logger } from '../lib/logger.js';
@@ -730,6 +732,30 @@ async function closePositionFromSell(order: OrderRow) {
   );
 }
 
+function isPumpToken(mint: string) {
+  return mint.toLowerCase().endsWith('pump');
+}
+
+async function processPumpTrade(order: OrderRow, signer: Keypair) {
+  const connection = rpcPool.getPrimaryConnection();
+  const provider = new AnchorProvider(connection, new Wallet(signer), { commitment: 'confirmed' });
+  const sdk = new PumpFunSDK(provider);
+  const mint = new PublicKey(order.mint);
+  const slippageBps = BigInt(order.slippage_bps || 300);
+  const priorityFeeLamports = Number(order.priority_fee_lamports || 1_000_000);
+
+  const options = {
+    unitLimit: 250_000,
+    unitPrice: Math.floor((priorityFeeLamports / 250_000) * 1_000_000),
+  };
+
+  if (order.side === 'BUY') {
+    return await sdk.buy(signer, mint, BigInt(order.amount_lamports), slippageBps, options);
+  } else {
+    return await sdk.sell(signer, mint, BigInt(order.amount_lamports), slippageBps, options);
+  }
+}
+
 export async function processNextOrder() {
   const order = await claimNextOrder();
   if (!order) {
@@ -753,26 +779,49 @@ export async function processNextOrder() {
       const attemptPriorityFeeLamports = resolveAttemptPriority(Number(order.priority_fee_lamports ?? 0), attempt);
 
       try {
-        const quote = await getBestQuote(
-          order.input_mint,
-          order.output_mint,
-          Number(order.amount_lamports),
-          attemptSlippageBps
-        );
-        const swapResponse = await buildSwapTransactionForOrder(
-          order,
-          quote,
-          signer.publicKey.toBase58(),
-          attemptPriorityFeeLamports
-        );
-        const tx = VersionedTransaction.deserialize(Buffer.from(swapResponse.swapTransaction!, 'base64'));
-        tx.sign([signer]);
+        let signature: string;
+        let quote: any;
+        let swapResponse: any = {};
 
-        const sendResult = await rpcPool.sendRawTransactionRace(tx.serialize(), {
-          skipPreflight: shouldSkipPreflight(order.metadata),
-          preflightCommitment: 'processed'
-        });
-        const signature = sendResult.signature;
+        if (isPumpToken(order.mint)) {
+          logger.info('executing_pump_trade', { mint: order.mint, side: order.side, attempt });
+          const pumpResult = await processPumpTrade({
+            ...order,
+            slippage_bps: attemptSlippageBps,
+            priority_fee_lamports: String(attemptPriorityFeeLamports)
+          }, signer);
+          
+          if (!pumpResult.success) {
+            throw new Error(pumpResult.error || 'pump_trade_failed');
+          }
+          signature = pumpResult.signature;
+          quote = { outAmount: '0' }; // Will be updated after confirmation
+          swapResponse = {
+            dynamicSlippageReport: { slippageBps: attemptSlippageBps }
+          };
+        } else {
+          quote = await getBestQuote(
+            order.input_mint,
+            order.output_mint,
+            Number(order.amount_lamports),
+            attemptSlippageBps
+          );
+          swapResponse = await buildSwapTransactionForOrder(
+            order,
+            quote,
+            signer.publicKey.toBase58(),
+            attemptPriorityFeeLamports
+          );
+          const tx = VersionedTransaction.deserialize(Buffer.from(swapResponse.swapTransaction!, 'base64'));
+          tx.sign([signer]);
+
+          const sendResult = await rpcPool.sendRawTransactionRace(tx.serialize(), {
+            skipPreflight: shouldSkipPreflight(order.metadata),
+            preflightCommitment: 'processed'
+          });
+          signature = sendResult.signature;
+        }
+
         lastSignature = signature;
 
         await query(
@@ -794,6 +843,18 @@ export async function processNextOrder() {
 
         if (confirmation.value.err) {
           throw new Error(JSON.stringify(confirmation.value.err));
+        }
+
+        if (isPumpToken(order.mint) && order.side === 'BUY') {
+          // Fetch token balance change for accurate tracking
+          try {
+            const tokenAccounts = await rpcPool.withConnection(
+              (connection) => connection.getParsedTokenAccountsByOwner(signer.publicKey, { mint: new PublicKey(order.mint) })
+            );
+            quote.outAmount = tokenAccounts.value[0]?.account.data.parsed.info.tokenAmount.amount || '0';
+          } catch (e) {
+            logger.error('failed_to_fetch_pump_token_balance', { mint: order.mint, error: String(e) });
+          }
         }
 
         await query(

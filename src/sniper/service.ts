@@ -875,7 +875,7 @@ export class SniperService {
     mint: string,
     creatorWallet: string | null,
     bondingCurve: string,
-    attempts = 4
+    attempts = 8
   ) {
     let lastError: unknown = null;
 
@@ -901,7 +901,10 @@ export class SniperService {
           attempts,
           message: error.message
         });
-        await wait(1000 * attempt);
+        
+        // Exponential backoff: 1.5s, 3s, 6s, 12s, 24s...
+        const delay = Math.min(30_000, 1000 * Math.pow(1.5, attempt));
+        await wait(delay);
       }
     }
 
